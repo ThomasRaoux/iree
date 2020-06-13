@@ -51,6 +51,7 @@ class DynamicLibraryPosix : public DynamicLibrary {
   }
 
   void* GetSymbol(const char* symbol_name) const override {
+    printf("reading symbol %s\n", symbol_name);
     return ::dlsym(library_, symbol_name);
   }
 

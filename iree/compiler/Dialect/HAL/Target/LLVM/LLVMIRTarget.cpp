@@ -53,7 +53,7 @@ class LLVMIRTargetBackend final : public TargetBackend {
     // into target independent LLVMIR.
     auto llvmModule = mlir::translateModuleToLLVMIR(targetOp.getInnerModule());
 
-    // Create invocation function an populate entry_points.
+    // Create invocation function and populate entry_points.
     iree::LLVMIRExecutableDefT llvmIrExecutableDef;
     auto executableOp = cast<IREE::HAL::ExecutableOp>(targetOp.getParentOp());
     auto entryPointOps =
@@ -74,8 +74,8 @@ class LLVMIRTargetBackend final : public TargetBackend {
                          options_.targetTriple);
       return failure();
     }
-    if (failed(runLLVMIRPasses(options_, std::move(targetMachine),
-                               llvmModule.get()))) {
+    if (failed(
+            runLLVMIRPasses(options_, targetMachine.get(), llvmModule.get()))) {
       return targetOp.emitError(
           "Can't build LLVMIR opt passes for ExecutableOp module");
     }

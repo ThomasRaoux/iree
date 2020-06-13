@@ -46,6 +46,7 @@ iree_cc_library(
     ::LLVMTargetOptions
     LLVMCore
     LLVMSupport
+    lldELF
     MLIRTargetLLVMIR
     iree::compiler::Conversion::LinalgToLLVM
     iree::compiler::Dialect::HAL::Target

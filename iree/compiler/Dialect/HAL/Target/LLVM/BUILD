@@ -74,6 +74,7 @@ cc_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//llvm:Target",
         "@llvm-project//mlir:Support",
+        "@llvm-project//llvm:X86CodeGen",
     ],
 )
 

@@ -91,7 +91,9 @@ DyLibExecutable::~DyLibExecutable() {
 }
 
 Status DyLibExecutable::Invoke(int func_id, absl::Span<void*> args) const {
-  return UnimplementedErrorBuilder(IREE_LOC) << "DyLibExecutable::Invoke NYI";
+  auto exe_func = (void (*)(void**))entry_functions_[func_id];
+  exe_func(args.data());
+  return OkStatus();
 }
 
 }  // namespace dylib

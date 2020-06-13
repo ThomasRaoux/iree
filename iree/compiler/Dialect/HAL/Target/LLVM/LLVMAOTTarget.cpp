@@ -18,6 +18,7 @@
 #include "iree/compiler/Dialect/HAL/Target/LLVM/LLVMIRPasses.h"
 #include "iree/compiler/Dialect/HAL/Target/TargetRegistry.h"
 #include "iree/schemas/dylib_executable_def_generated.h"
+#include "lld/Common/Driver.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/TargetSelect.h"
@@ -64,22 +65,70 @@ class LLVMAOTTargetBackend final : public TargetBackend {
       std::string funcName =
           addCInterface ? "_mlir_ciface_" + std::string(entryPointOp.sym_name())
                         : std::string(entryPointOp.sym_name());
-      dyLibExecutableDef.entry_points.push_back(funcName);
+      dyLibExecutableDef.entry_points.push_back("invoke_" + funcName);
       createLLVMInvocationFunc(funcName, llvmModule.get());
     }
 
-    if (!llvmModule) {
+    // LLVMIR opt passes.
+    auto targetMachine = createTargetMachine(options_);
+    if (!targetMachine) {
+      targetOp.emitError("Can't create target machine for target triple: " +
+                         options_.targetTriple);
       return failure();
     }
 
-    // TODO(scotttodd): LLVM AOT compilation to
-    //   dyLibExecutableDef.library_embedded.assign(...)
+    llvmModule->setDataLayout(targetMachine->createDataLayout());
+    llvmModule->setTargetTriple(targetMachine->getTargetTriple().str());
 
+    if (failed(
+            runLLVMIRPasses(options_, targetMachine.get(), llvmModule.get()))) {
+      return targetOp.emitError(
+          "Can't build LLVMIR opt passes for ExecutableOp module");
+    }
+
+    std::string objData;
+    if (failed(runEmitObjFilePasses(targetMachine.get(), llvmModule.get(),
+                                    &objData))) {
+      return targetOp.emitError("Can't compile LLVMIR module to an obj");
+    }
+
+    // Write archive to tmp file, generate shared library by lld then embedd the
+    // file.
+    auto tmpArchive = llvm::sys::fs::TempFile::create("/tmp/tmp_archive");
+    auto tmpSharedlib = llvm::sys::fs::TempFile::create("/tmp/tmp_shared_lib");
+    auto& file = tmpArchive.get();
+    auto& libFile = tmpSharedlib.get();
+    {
+      std::error_code error;
+      llvm::raw_fd_ostream tmpfile(file.TmpName.c_str(), error);
+      tmpfile << objData;
+    }
+
+    printf("DEBUG %s\n", file.TmpName.c_str());
+
+    bool ret =
+        lld::elf::link({"ld.lld", "-shared", file.TmpName.c_str(), "-o",
+                        libFile.TmpName.c_str()},
+                       /*canEarlyExit=*/false, llvm::outs(), llvm::errs());
+    if (!ret) {
+      return targetOp.emitError("Can't lld link module into a shared library");
+    }
+    file.discard();
+
+    // Read shared library.
+
+    auto memBufferPtr =
+        std::move(llvm::MemoryBuffer::getFile(libFile.TmpName.c_str()).get());
+    libFile.discard();
+
+    dyLibExecutableDef.library_embedded = {memBufferPtr->getBuffer().begin(),
+                                           memBufferPtr->getBuffer().end()};
     ::flatbuffers::FlatBufferBuilder fbb;
     auto executableOffset =
         iree::DyLibExecutableDef::Pack(fbb, &dyLibExecutableDef);
     iree::FinishDyLibExecutableDefBuffer(fbb, executableOffset);
     std::vector<uint8_t> bytes;
+
     bytes.resize(fbb.GetSize());
     std::memcpy(bytes.data(), fbb.GetBufferPointer(), bytes.size());
 
@@ -102,6 +151,7 @@ void registerLLVMAOTTargetBackends(
   static TargetBackendRegistration registration("dylib-llvm-aot", [=]() {
     // Initalize registered targets.
     llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
     return std::make_unique<LLVMAOTTargetBackend>(queryOptions());
   });
 }

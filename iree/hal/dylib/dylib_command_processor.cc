@@ -55,6 +55,10 @@ Status DyLibCommandProcessor::DispatchInline(
       args.push_back(&descriptor->descriptor);
     }
   }
+  auto push_constants_descriptor =
+      allocUnrankedDescriptor<uint32_t>((void*)push_constants.values.data());
+  descriptors.push_back(push_constants_descriptor);
+  args.push_back(&push_constants_descriptor->descriptor);
   auto status = dylib_executable->Invoke(entry_point, absl::MakeSpan(args));
 
   for (int i = 0; i < descriptors.size(); ++i) {
@@ -62,7 +66,7 @@ Status DyLibCommandProcessor::DispatchInline(
   }
 
   return status;
-}
+}  // namespace dylib
 
 }  // namespace dylib
 }  // namespace hal
