@@ -50,3 +50,4 @@ RUN apt-get install -y \
 # Environment variables for IREE.
 ENV CC /usr/bin/clang
 ENV CXX /usr/bin/clang++
+ENV IREE_LLVMAOT_LINKER_PATH /usr/bin/ld

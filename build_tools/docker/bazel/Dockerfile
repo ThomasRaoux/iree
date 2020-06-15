@@ -33,6 +33,7 @@ RUN apt-get update
 ENV CXX clang++
 ENV CC clang
 ENV PYTHON_BIN /usr/bin/python3
+ENV IREE_LLVMAOT_LINKER_PATH /usr/bin/ld
 
 # Install git for updating IREE's submodules.
 RUN apt-get install -y git

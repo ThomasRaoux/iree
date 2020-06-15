@@ -19,6 +19,7 @@ load(
     "PYBIND_EXTENSION_COPTS",
     "PYBIND_FEATURES",
     "PYBIND_REGISTER_MLIR_PASSES",
+    "PYTHON_CPP_EXTRA_DEPS",
     "iree_py_extension",
     "iree_py_library",
     "iree_py_test",
@@ -54,7 +55,7 @@ iree_py_library(
         "__init__.py",
     ],
     srcs_version = "PY3",
-    deps = [
+    deps = PYTHON_CPP_EXTRA_DEPS + [
         ":binding",
         "//bindings/python:pathsetup",  # build_cleaner: keep
     ],
