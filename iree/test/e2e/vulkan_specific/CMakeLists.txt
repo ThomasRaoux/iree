@@ -28,7 +28,7 @@ iree_check_single_backend_test_suite(
 
 iree_check_single_backend_test_suite(
   NAME
-    check_vulkan-spirv-pad-conv_vulkan
+    check_vulkan-spirv-split-pad-conv_vulkan
   SRCS
     "convolution1.mlir"
     "convolution2.mlir"
@@ -37,5 +37,19 @@ iree_check_single_backend_test_suite(
   DRIVER
     vulkan
   COMPILER_FLAGS
-    "-iree-extract-pad-from-conv"
+    "-iree-extract-pad-from-conv=false"
+)
+
+iree_check_single_backend_test_suite(
+  NAME
+    check_vulkan-spirv-nosplit-pad-conv_vulkan
+  SRCS
+    "convolution1.mlir"
+    "convolution2.mlir"
+  TARGET_BACKEND
+    vulkan-spirv
+  DRIVER
+    vulkan
+  COMPILER_FLAGS
+    "-iree-extract-pad-from-conv=false"
 )

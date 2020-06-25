@@ -32,7 +32,7 @@ namespace {
 static llvm::cl::opt<bool> extractPadFromConv(
     "iree-extract-pad-from-conv",
     llvm::cl::desc("Extract padding attributes from conv op"),
-    llvm::cl::init(false));
+    llvm::cl::init(true));
 
 static bool isAllZero(DenseIntElementsAttr attr) {
   if (!attr.isSplat()) return false;
