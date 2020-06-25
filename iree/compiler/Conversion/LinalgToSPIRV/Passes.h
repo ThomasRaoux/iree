@@ -15,7 +15,9 @@
 #ifndef IREE_COMPILER_CONVERSION_LINALGTOSPIRV_PASSES_H_
 #define IREE_COMPILER_CONVERSION_LINALGTOSPIRV_PASSES_H_
 
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 namespace mlir {
 namespace iree_compiler {
@@ -61,6 +63,14 @@ std::unique_ptr<OperationPass<FuncOp>> createVectorToGPUPass();
 void buildSPIRVTransformPassPipeline(OpPassManager &pm,
                                      ArrayRef<int64_t> workGroupSize);
 
+/// Pattern to map loop.parallel to workgroups.
+struct PartitionPLoopToWorkgroups
+    : public OpConversionPattern<scf::ParallelOp> {
+  using OpConversionPattern<scf::ParallelOp>::OpConversionPattern;
+  LogicalResult matchAndRewrite(
+      scf::ParallelOp pLoopOp, ArrayRef<Value> operands,
+      ConversionPatternRewriter &rewriter) const override;
+};
 }  // namespace iree_compiler
 }  // namespace mlir
 

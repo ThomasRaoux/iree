@@ -300,22 +300,16 @@ static LogicalResult mapToGlobalInvocationId(
 //===----------------------------------------------------------------------===//
 // Pass and patterns.
 //===----------------------------------------------------------------------===//
+LogicalResult PartitionPLoopToWorkgroups::matchAndRewrite(
+    scf::ParallelOp pLoopOp, ArrayRef<Value> operands,
+    ConversionPatternRewriter &rewriter) const {
+  return mapToWorkgroups(rewriter, pLoopOp);
+}
 
 namespace {
 /// Pass to convert from tiled and fused linalg ops into gpu.func.
 struct ConvertToGPUPass : public PassWrapper<ConvertToGPUPass, FunctionPass> {
   void runOnFunction() override;
-};
-
-/// Pattern to map loop.parallel to workgroups.
-struct PartitionPLoopToWorkgroups
-    : public OpConversionPattern<scf::ParallelOp> {
-  using OpConversionPattern<scf::ParallelOp>::OpConversionPattern;
-  LogicalResult matchAndRewrite(
-      scf::ParallelOp pLoopOp, ArrayRef<Value> operands,
-      ConversionPatternRewriter &rewriter) const override {
-    return mapToWorkgroups(rewriter, pLoopOp);
-  }
 };
 
 /// Map tiled linalg op to workitems by lowering it to loop.parallel and
