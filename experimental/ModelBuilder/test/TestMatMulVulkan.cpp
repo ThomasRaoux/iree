@@ -114,8 +114,12 @@ void testMatMul() {
     spirvModulePM.addPass(
         mlir::spirv::createUpdateVersionCapabilityExtensionPass());
 
-    pm.addPass(
-        mlir::createAddVulkanLaunchWrapperPass({width, height, 1}, args));
+    int numWorkgroupX =
+        vWorkgroupSizes.empty() ? 1 : width / vWorkgroupSizes[0];
+    int numWorkgroupY =
+        vWorkgroupSizes.size() < 2 ? 1 : height / vWorkgroupSizes[1];
+    pm.addPass(mlir::createAddVulkanLaunchWrapperPass(
+        {numWorkgroupX, numWorkgroupY, 1}, args));
     mlir::LowerToLLVMOptions llvmOptions = {
         /*useBarePtrCallConv =*/false,
         /*emitCWrappers = */ true,
