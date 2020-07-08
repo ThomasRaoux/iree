@@ -66,7 +66,8 @@ namespace mlir {
 namespace iree_compiler {
 
 CooperativeMatrixAnalysis::CooperativeMatrixAnalysis(mlir::Operation* op) {
-  auto targetEnv = spirv::TargetEnv(spirv::lookupTargetEnv(op));
+  return;
+	auto targetEnv = spirv::TargetEnv(spirv::lookupTargetEnv(op));
   if (!targetEnv.allows(spirv::Capability::CooperativeMatrixNV) ||
       !targetEnv.allows(spirv::Extension::SPV_NV_cooperative_matrix))
     return;

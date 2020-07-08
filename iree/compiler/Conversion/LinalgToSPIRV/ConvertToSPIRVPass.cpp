@@ -210,8 +210,8 @@ class TransferToCoopMatLoadStore final : public SPIRVOpLowering<OpTy> {
   LogicalResult matchAndRewrite(
       OpTy op, ArrayRef<Value> operands,
       ConversionPatternRewriter &rewriter) const override {
-    if (!cooperativeMatrixAnalysis.usesCooperativeMatrixType(op))
-      return failure();
+//    if (!cooperativeMatrixAnalysis.usesCooperativeMatrixType(op))
+//      return failure();
     auto loc = op.getLoc();
     auto vecType = op.getVectorType();
     if (vecType.getRank() != 2) return failure();
@@ -287,8 +287,8 @@ class VectorContractToCoopMatmul final
   LogicalResult matchAndRewrite(
       vector::ContractionOp contractOp, ArrayRef<Value> operands,
       ConversionPatternRewriter &rewriter) const override {
-    if (!cooperativeMatrixAnalysis.usesCooperativeMatrixType(contractOp))
-      return failure();
+//    if (!cooperativeMatrixAnalysis.usesCooperativeMatrixType(contractOp))
+//      return failure();
     auto loc = contractOp.getLoc();
     // Check that all the operands are cooperative matrix.
     vector::ContractionOp::Adaptor adaptor(operands);

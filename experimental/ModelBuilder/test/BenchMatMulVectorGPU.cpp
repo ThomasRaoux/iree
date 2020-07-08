@@ -138,7 +138,7 @@ void matMul(int m, int n, int k, int tileM, int tileN, int tileK,
             linalg::LinalgTilingOptions()
                 .setLoopType(linalg::LinalgTilingLoopType::ParallelLoops)
                 .setTileSizes({tileM, tileN, tileK}))
-        .setHoistInvariantCode(false)
+        .setHoistInvariantCode(true)
         .vectorize<linalg::MatmulOp>()
         .unrollVector<vector::ContractionOp>(
             {cooperativeMatrixM, cooperativeMatrixN, cooperativeMatrixK});

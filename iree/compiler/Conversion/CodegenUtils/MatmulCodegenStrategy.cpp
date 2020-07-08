@@ -234,7 +234,7 @@ void MatmulCodegenStrategy::transform(FuncOp func) const {
     // stage 1 application and may have to be split out to post staged patterns
     // application (in which case they could just be passes, TBD).
     if (hoistInvariantCode) {
-      PassManager pm(op->getContext());
+      PassManager pm(op->getContext(), false);
       pm.addPass(createLoopInvariantCodeMotionPass());
       if (failed(pm.run(op->getParentOfType<ModuleOp>())))
         llvm_unreachable("Unexpected failure in cleanup pass pipeline.");
@@ -245,8 +245,11 @@ void MatmulCodegenStrategy::transform(FuncOp func) const {
     promoteSingleIterationLoops(cast<FuncOp>(op));
     return success();
   };
-  linalg::applyStagedPatterns(func, stage1Patterns, stage2Patterns,
-                              stage3Transforms);
+  linalg::applyStagedPatterns(func, stage1Patterns, stage2Patterns);
+ 
+  // hack: apply hoisting once everything is lowered to avoid hoisting transfer
+  // op before unrolling
+  stage3Transforms(func);
   if (lowering != nullptr) lowering(func);
 }
 
