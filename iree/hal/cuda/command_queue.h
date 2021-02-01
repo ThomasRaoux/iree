@@ -33,7 +33,7 @@ class CommandQueue {
   virtual ~CommandQueue() {
     IREE_TRACE_SCOPE0("CommandQueue::dtor");
     iree_slim_mutex_lock(&queue_mutex_);
-    syms()->vkQueueWaitIdle(queue_);
+//    syms()->vkQueueWaitIdle(queue_);
     iree_slim_mutex_unlock(&queue_mutex_);
     iree_slim_mutex_deinitialize(&queue_mutex_);
   }
@@ -52,8 +52,8 @@ class CommandQueue {
   virtual iree_status_t WaitIdle(iree_time_t deadline_ns) = 0;
 
  protected:
-  CommandQueue(VkDeviceHandle* logical_device, std::string name,
-               iree_hal_command_category_t supported_categories, VkQueue queue)
+  CommandQueue(CuDeviceHandle* logical_device, std::string name,
+               iree_hal_command_category_t supported_categories, CUstream queue)
       : logical_device_(logical_device),
         name_(std::move(name)),
         supported_categories_(supported_categories),
@@ -61,13 +61,13 @@ class CommandQueue {
     iree_slim_mutex_initialize(&queue_mutex_);
   }
 
-  VkDeviceHandle* logical_device_;
+  CuDeviceHandle* logical_device_;
   const std::string name_;
   const iree_hal_command_category_t supported_categories_;
 
-  // VkQueue needs to be externally synchronized.
+  // CUstream needs to be externally synchronized.
   iree_slim_mutex_t queue_mutex_;
-  VkQueue queue_ IREE_GUARDED_BY(queue_mutex_);
+  CUstream queue_ IREE_GUARDED_BY(queue_mutex_);
 };
 
 }  // namespace cuda

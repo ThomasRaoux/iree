@@ -28,53 +28,20 @@ iree_cc_library(
   SRCS
     "api.cc"
     "command_queue.h"
+    "cuda_device.cc"
+    "cuda_driver.cc"
+    "cuda_headers.h"
     "debug_reporter.cc"
     "debug_reporter.h"
-    "descriptor_pool_cache.cc"
-    "descriptor_pool_cache.h"
-    "descriptor_set_arena.cc"
-    "descriptor_set_arena.h"
     "direct_command_buffer.cc"
     "direct_command_buffer.h"
     "direct_command_queue.cc"
     "direct_command_queue.h"
-    "emulated_semaphore.cc"
-    "emulated_semaphore.h"
-    "extensibility_util.cc"
-    "extensibility_util.h"
     "handle_util.h"
-    "internal_vk_mem_alloc.cc"
-    "internal_vk_mem_alloc.h"
-    "native_descriptor_set.cc"
-    "native_descriptor_set.h"
-    "native_descriptor_set_layout.cc"
-    "native_descriptor_set_layout.h"
-    "native_event.cc"
-    "native_event.h"
-    "native_executable.cc"
-    "native_executable.h"
-    "native_executable_layout.cc"
-    "native_executable_layout.h"
-    "native_semaphore.cc"
-    "native_semaphore.h"
-    "nop_executable_cache.cc"
-    "nop_executable_cache.h"
-    "serializing_command_queue.cc"
-    "serializing_command_queue.h"
     "status_util.c"
     "status_util.h"
-    "timepoint_util.cc"
-    "timepoint_util.h"
-    "vma_allocator.cc"
-    "vma_allocator.h"
-    "vma_buffer.cc"
-    "vma_buffer.h"
-    "cuda_device.cc"
-    "cuda_driver.cc"
-    "cuda_headers.h"
   DEPS
     ::dynamic_symbols
-    Cuda::Headers
     absl::core_headers
     absl::flat_hash_map
     absl::inlined_vector
@@ -93,22 +60,20 @@ iree_cc_library(
     iree::base::synchronization
     iree::base::tracing
     iree::hal::api
-    iree::schemas::spirv_executable_def_c_fbs
-    cuda_memory_allocator
   PUBLIC
 )
+
 
 iree_cc_library(
   NAME
     dynamic_symbols
   HDRS
-    "dynamic_symbol_tables.h"
+    #"dynamic_symbol_tables.h"
     "dynamic_symbols.h"
   SRCS
     "dynamic_symbols.cc"
     "cuda_headers.h"
   DEPS
-    Cuda::Headers
     absl::core_headers
     absl::memory
     absl::span
@@ -120,6 +85,7 @@ iree_cc_library(
     iree::base::tracing
   PUBLIC
 )
+  return()
 
 iree_cc_test(
   NAME

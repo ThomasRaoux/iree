@@ -17,7 +17,6 @@
 #include "iree/base/api.h"
 #include "iree/base/tracing.h"
 #include "iree/hal/cuda/dynamic_symbols.h"
-#include "iree/hal/cuda/extensibility_util.h"
 #include "iree/hal/cuda/cuda_device.h"
 #include "iree/hal/cuda/cuda_driver.h"
 
@@ -36,7 +35,7 @@ IREE_API_EXPORT iree_status_t IREE_API_CALL iree_hal_cuda_syms_create(
   IREE_ASSERT_ARGUMENT(out_syms);
   *out_syms = nullptr;
 
-  IREE_ASSIGN_OR_RETURN(
+  /*IREE_ASSIGN_OR_RETURN(
       auto syms, DynamicSymbols::Create([&vkGetInstanceProcAddr_fn](
                                             const char* function_name) {
         // Only resolve vkGetInstanceProcAddr, rely on syms->LoadFromInstance()
@@ -48,7 +47,7 @@ IREE_API_EXPORT iree_status_t IREE_API_CALL iree_hal_cuda_syms_create(
         return reinterpret_cast<PFN_vkVoidFunction>(NULL);
       }));
 
-  *out_syms = reinterpret_cast<iree_hal_cuda_syms_t*>(syms.release());
+  *out_syms = reinterpret_cast<iree_hal_cuda_syms_t*>(syms.release());*/
   return iree_ok_status();
 }
 

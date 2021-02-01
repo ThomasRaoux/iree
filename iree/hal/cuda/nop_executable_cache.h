@@ -26,7 +26,7 @@ extern "C" {
 // This is useful to isolate pipeline caching behavior and verify compilation
 // behavior.
 iree_status_t iree_hal_cuda_nop_executable_cache_create(
-    iree::hal::cuda::VkDeviceHandle* logical_device,
+    iree::hal::cuda::CuDeviceHandle* logical_device,
     iree_string_view_t identifier,
     iree_hal_executable_cache_t** out_executable_cache);
 

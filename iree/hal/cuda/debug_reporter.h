@@ -33,8 +33,7 @@ typedef struct iree_hal_cuda_debug_reporter_s
     iree_hal_cuda_debug_reporter_t;
 
 iree_status_t iree_hal_cuda_debug_reporter_allocate(
-    VkInstance instance, iree::hal::cuda::DynamicSymbols* syms,
-    const VkAllocationCallbacks* allocation_callbacks,
+    iree::hal::cuda::DynamicSymbols* syms,
     iree_allocator_t host_allocator,
     iree_hal_cuda_debug_reporter_t** out_reporter);
 

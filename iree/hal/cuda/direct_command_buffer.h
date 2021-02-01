@@ -16,7 +16,6 @@
 #define IREE_HAL_CUDA_DIRECT_COMMAND_BUFFER_H_
 
 #include "iree/hal/api.h"
-#include "iree/hal/cuda/descriptor_pool_cache.h"
 #include "iree/hal/cuda/handle_util.h"
 
 #ifdef __cplusplus
@@ -25,16 +24,11 @@ extern "C" {
 
 // Creates a command buffer that directly records into a VkCommandBuffer.
 iree_status_t iree_hal_cuda_direct_command_buffer_allocate(
-    iree::hal::cuda::VkDeviceHandle* logical_device,
-    iree::hal::cuda::VkCommandPoolHandle* command_pool,
+    iree::hal::cuda::CuDeviceHandle* logical_device,
+    iree::hal::cuda::CuCommandPoolHandle* command_pool,
     iree_hal_command_buffer_mode_t mode,
     iree_hal_command_category_t command_categories,
-    iree::hal::cuda::DescriptorPoolCache* descriptor_pool_cache,
     iree_hal_command_buffer_t** out_command_buffer);
-
-// Returns the native Cuda VkCommandBuffer handle.
-VkCommandBuffer iree_hal_cuda_direct_command_buffer_handle(
-    iree_hal_command_buffer_t* command_buffer);
 
 #ifdef __cplusplus
 }  // extern "C"

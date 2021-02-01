@@ -63,7 +63,7 @@ enum iree_hal_cuda_extensibility_set_e {
   IREE_HAL_CUDA_EXTENSIBILITY_INSTANCE_EXTENSIONS_OPTIONAL = 3,
 
   // A set of required device extension names. These must all be enabled on
-  // the VkDevice for IREE to function.
+  // the CUdevice for IREE to function.
   IREE_HAL_CUDA_EXTENSIBILITY_DEVICE_EXTENSIONS_REQUIRED = 4,
 
   // A set of optional device extension names. If omitted fallbacks may be
@@ -79,10 +79,6 @@ typedef uint32_t iree_hal_cuda_extensibility_set_t;
 // layers and extensions as defined by these sets. Optional layers and
 // extensions will be used when needed and otherwise have fallbacks for when
 // they are not available.
-//
-// Instance extensions should be enabled on VkInstances passed to
-// |iree_hal_cuda_driver_create_using_instance| and device extensions should
-// be enabled on VkDevices passed to |iree_hal_cuda_driver_wrap_device|.
 //
 // |string_capacity| defines the number of elements available in
 // |out_string_values| and |out_string_count| will be set with the actual number
@@ -139,9 +135,9 @@ iree_hal_cuda_syms_release(iree_hal_cuda_syms_t* syms);
 // iree_hal_cuda_device_t
 //===----------------------------------------------------------------------===//
 
-// A set of queues within a specific queue family on a VkDevice.
+// A set of queues within a specific queue family on a CUdevice.
 typedef struct {
-  // The index of a particular queue family on a VkPhysicalDevice, as described
+  // The index of a particular queue family on a CUdevice, as described
   // by vkGetPhysicalDeviceQueueFamilyProperties.
   uint32_t queue_family_index;
 
@@ -166,44 +162,6 @@ typedef struct {
 IREE_API_EXPORT void IREE_API_CALL iree_hal_cuda_device_options_initialize(
     iree_hal_cuda_device_options_t* out_options);
 
-// Creates a Cuda HAL device that wraps an existing VkDevice.
-//
-// HAL devices created in this way may share Cuda resources and synchronize
-// within the same physical VkPhysicalDevice and logical VkDevice directly.
-//
-// |logical_device| is expected to have been created with all extensions
-// returned by |iree_hal_cuda_get_extensions| and
-// IREE_HAL_CUDA_DEVICE_REQUIRED using the features provided during driver
-// creation.
-//
-// |instance_syms| must have at least the instance-specific functions resolved
-// and device symbols will be queried from |logical_device| as needed.
-//
-// The device will schedule commands against the queues in
-// |compute_queue_set| and (if set) |transfer_queue_set|.
-//
-// Applications may choose how these queues are created and selected in order
-// to control how commands submitted by this device are prioritized and
-// scheduled. For example, a low priority queue could be provided to one IREE
-// device for background processing or a high priority queue could be provided
-// for latency-sensitive processing.
-//
-// Dedicated compute queues (no graphics capabilities) are preferred within
-// |compute_queue_set|, if they are available.
-// Similarly, dedicated transfer queues (no compute or graphics) are preferred
-// within |transfer_queue_set|.
-// The queue sets can be the same.
-//
-// |out_device| must be released by the caller (see |iree_hal_device_release|).
-IREE_API_EXPORT iree_status_t IREE_API_CALL iree_hal_cuda_wrap_device(
-    iree_string_view_t identifier,
-    const iree_hal_cuda_device_options_t* options,
-    const iree_hal_cuda_syms_t* instance_syms, VkInstance instance,
-    VkPhysicalDevice physical_device, VkDevice logical_device,
-    const iree_hal_cuda_queue_set_t* compute_queue_set,
-    const iree_hal_cuda_queue_set_t* transfer_queue_set,
-    iree_allocator_t host_allocator, iree_hal_device_t** out_device);
-
 //===----------------------------------------------------------------------===//
 // iree_hal_cuda_driver_t
 //===----------------------------------------------------------------------===//
@@ -214,7 +172,7 @@ typedef struct {
   // Driver creation will fail if the required version is not available.
   uint32_t api_version;
 
-  // IREE features used to configure the VkInstance and VkDevices created using
+  // IREE features used to configure the VkInstance and CUdevices created using
   // it. These are used to populate the active Cuda layers and extensions when
   // the instance and its devices are created.
   iree_hal_cuda_features_t requested_features;
@@ -228,7 +186,7 @@ typedef struct {
   iree_hal_cuda_device_options_t device_options;
 
   // TODO(benvanik): change to something more canonically cuda (like
-  // VkPhysicalDeviceProperties::deviceID).
+  // CUdeviceProperties::deviceID).
   // Index of the default Cuda device to use within the list of available
   // devices. Devices are discovered via vkEnumeratePhysicalDevices then
   // considered "available" if compatible with the |requested_features|.
@@ -247,19 +205,6 @@ IREE_API_EXPORT iree_status_t IREE_API_CALL iree_hal_cuda_driver_create(
     iree_hal_cuda_syms_t* syms, iree_allocator_t host_allocator,
     iree_hal_driver_t** out_driver);
 
-// Creates a Cuda HAL driver that shares an existing VkInstance.
-//
-// |instance| is expected to have been created with all extensions returned by
-// the instance-specific |iree_hal_cuda_query_extensibility_set| queries.
-//
-// |instance| must remain valid for the life of |out_driver| and |out_driver|
-// itself must be released by the caller (see |iree_hal_driver_release|).
-IREE_API_EXPORT iree_status_t IREE_API_CALL
-iree_hal_cuda_driver_create_using_instance(
-    iree_string_view_t identifier,
-    const iree_hal_cuda_driver_options_t* options,
-    iree_hal_cuda_syms_t* instance_syms, VkInstance instance,
-    iree_allocator_t host_allocator, iree_hal_driver_t** out_driver);
 
 #ifdef __cplusplus
 }  // extern "C"

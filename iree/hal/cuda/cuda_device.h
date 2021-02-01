@@ -18,13 +18,12 @@
 #include "iree/hal/api.h"
 #include "iree/hal/cuda/api.h"
 #include "iree/hal/cuda/dynamic_symbols.h"
-#include "iree/hal/cuda/extensibility_util.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
 
-// Creates a device that owns and manages its own VkDevice.
+// Creates a device that owns and manages its own CUdevice.
 //
 // The |driver| will be retained for as long as the device is live such that if
 // the driver owns the |instance| provided it is ensured to be valid. |driver|
@@ -34,8 +33,8 @@ iree_status_t iree_hal_cuda_device_create(
     iree_hal_driver_t* driver, iree_string_view_t identifier,
     iree_hal_cuda_features_t enabled_features,
     const iree_hal_cuda_device_options_t* options,
-    iree_hal_cuda_syms_t* instance_syms, VkInstance instance,
-    VkPhysicalDevice physical_device, iree_allocator_t host_allocator,
+    iree_hal_cuda_syms_t* instance_syms,
+    CUdevice physical_device, iree_allocator_t host_allocator,
     iree_hal_device_t** out_device);
 
 #ifdef __cplusplus

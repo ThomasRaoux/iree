@@ -24,7 +24,7 @@ static const iree_hal_executable_format_t kExecutableFormatSpirV =
 
 typedef struct {
   iree_hal_resource_t resource;
-  VkDeviceHandle* logical_device;
+  CuDeviceHandle* logical_device;
 } iree_hal_cuda_nop_executable_cache_t;
 
 extern const iree_hal_executable_cache_vtable_t
@@ -39,7 +39,7 @@ iree_hal_cuda_nop_executable_cache_cast(
 }
 
 iree_status_t iree_hal_cuda_nop_executable_cache_create(
-    iree::hal::cuda::VkDeviceHandle* logical_device,
+    iree::hal::cuda::CuDeviceHandle* logical_device,
     iree_string_view_t identifier,
     iree_hal_executable_cache_t** out_executable_cache) {
   IREE_ASSERT_ARGUMENT(out_executable_cache);
@@ -91,7 +91,7 @@ static iree_status_t iree_hal_cuda_nop_executable_cache_prepare_executable(
       iree_hal_cuda_nop_executable_cache_cast(base_executable_cache);
   return iree_hal_cuda_native_executable_create(
       executable_cache->logical_device,
-      /*pipeline_cache=*/VK_NULL_HANDLE, executable_layout, caching_mode,
+      /*pipeline_cache=*/NULL, executable_layout, caching_mode,
       executable_data, out_executable);
 }
 

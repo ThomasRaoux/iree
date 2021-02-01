@@ -22,12 +22,12 @@ namespace iree {
 namespace hal {
 namespace cuda {
 
-// Command queue implementation directly maps to VkQueue.
+// Command queue implementation directly maps to CUstream.
 class DirectCommandQueue final : public CommandQueue {
  public:
-  DirectCommandQueue(VkDeviceHandle* logical_device, std::string name,
+  DirectCommandQueue(CuDeviceHandle* logical_device, std::string name,
                      iree_hal_command_category_t supported_categories,
-                     VkQueue queue);
+                     CUstream queue);
   ~DirectCommandQueue() override;
 
   iree_status_t Submit(iree_host_size_t batch_count,
@@ -36,9 +36,6 @@ class DirectCommandQueue final : public CommandQueue {
   iree_status_t WaitIdle(iree_time_t deadline_ns) override;
 
  private:
-  iree_status_t TranslateBatchInfo(
-      const iree_hal_submission_batch_t* batch, VkSubmitInfo* submit_info,
-      VkTimelineSemaphoreSubmitInfo* timeline_submit_info, Arena* arena);
 };
 
 }  // namespace cuda

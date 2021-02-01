@@ -26,7 +26,7 @@
 #include "iree/base/dynamic_library.h"
 #include "iree/base/ref_ptr.h"
 #include "iree/base/status.h"
-#include "iree/hal/cuda/dynamic_symbol_tables.h"
+//#include "iree/hal/cuda/dynamic_symbol_tables.h"
 
 namespace iree {
 namespace hal {
@@ -64,19 +64,8 @@ struct FunctionPtrInfo;
 //  syms->vkCreateInstance(..., &instance);
 //  IREE_RETURN_IF_ERROR(syms->LoadFromInstance(instance));
 struct DynamicSymbols : public RefObject<DynamicSymbols> {
-  using GetProcAddrFn =
-      std::function<PFN_vkVoidFunction(const char* function_name)>;
-
   DynamicSymbols();
   ~DynamicSymbols();
-
-  // Creates the dynamic symbol table using the given |get_proc_addr| to resolve
-  // the vkCreateInstance function.
-  //
-  // After the instance is created the caller must use LoadFromInstance (or
-  // LoadFromDevice) to load the remaining symbols.
-  static StatusOr<ref_ptr<DynamicSymbols>> Create(
-      const GetProcAddrFn& get_proc_addr);
 
   // Loads all required and optional Cuda functions from the Cuda loader.
   // This will look for a Cuda loader on the system (like libcuda.so) and
@@ -87,20 +76,13 @@ struct DynamicSymbols : public RefObject<DynamicSymbols> {
   // errors come from within the ICD, where we have symbols).
   static StatusOr<ref_ptr<DynamicSymbols>> CreateFromSystemLoader();
 
-  // Loads all required and optional Cuda functions from the given instance.
-  //
-  // The loaded function pointers will point to thunks in the ICD. This may
-  // enable additional debug checking and more readable stack traces (as
-  // errors come from within the ICD, where we have symbols).
-  Status LoadFromInstance(VkInstance instance);
-
   // Loads all required and optional Cuda functions from the given device,
   // falling back to the instance when required.
   //
   // This attempts to directly query the methods from the device, bypassing any
   // ICD or shim layers. These methods will generally have less overhead at
   // runtime as they need not jump through the various trampolines.
-  Status LoadFromDevice(VkInstance instance, VkDevice device);
+  Status LoadFromDevice(CUdevice device);
 
   // Define members for each function pointer.
   // See dynamic_symbol_tables.h for the full list of methods.
@@ -108,7 +90,7 @@ struct DynamicSymbols : public RefObject<DynamicSymbols> {
   // Each required and optional function in the loader tables will expand to
   // the following member, such as for example 'vkSomeFunction':
   //   PFN_vkSomeFunction vkSomeFunction;
-#define REQUIRED_PFN(function_name) PFN_##function_name function_name = nullptr
+/*#define REQUIRED_PFN(function_name) PFN_##function_name function_name = nullptr
 #define OPTIONAL_PFN(function_name) PFN_##function_name function_name = nullptr
 #define EXCLUDED_PFN(function_name)
 #define PFN_MEMBER(requirement, function_name) requirement##_PFN(function_name);
@@ -118,11 +100,9 @@ struct DynamicSymbols : public RefObject<DynamicSymbols> {
 #undef REQUIRED_PFN
 #undef OPTIONAL_PFN
 #undef EXCLUDED_PFN
-#undef PFN_MEMBER
+#undef PFN_MEMBER*/
 
  private:
-  void FixupExtensionFunctions();
-
   // Optional Cuda Loader dynamic library.
   std::unique_ptr<DynamicLibrary> loader_library_;
 };
