@@ -84,23 +84,11 @@ struct DynamicSymbols : public RefObject<DynamicSymbols> {
   // runtime as they need not jump through the various trampolines.
   Status LoadFromDevice(CUdevice device);
 
-  // Define members for each function pointer.
-  // See dynamic_symbol_tables.h for the full list of methods.
-  //
-  // Each required and optional function in the loader tables will expand to
-  // the following member, such as for example 'vkSomeFunction':
-  //   PFN_vkSomeFunction vkSomeFunction;
-/*#define REQUIRED_PFN(function_name) PFN_##function_name function_name = nullptr
-#define OPTIONAL_PFN(function_name) PFN_##function_name function_name = nullptr
-#define EXCLUDED_PFN(function_name)
-#define PFN_MEMBER(requirement, function_name) requirement##_PFN(function_name);
-  REQUIRED_PFN(vkGetInstanceProcAddr);
-  REQUIRED_PFN(vkGetDeviceProcAddr);
-  IREE_CUDA_DYNAMIC_SYMBOL_TABLES(PFN_MEMBER, PFN_MEMBER);
-#undef REQUIRED_PFN
-#undef OPTIONAL_PFN
-#undef EXCLUDED_PFN
-#undef PFN_MEMBER*/
+#define CU_PFN_DECL(cudaSymbolName) \
+  std::add_pointer<decltype(::cudaSymbolName)>::type cudaSymbolName;
+
+#include "dynamic_symbol_tables.def"
+#undef CU_PFN_DECL
 
  private:
   // Optional Cuda Loader dynamic library.

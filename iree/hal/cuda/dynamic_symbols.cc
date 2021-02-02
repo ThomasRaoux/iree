@@ -55,7 +55,25 @@ StatusOr<ref_ptr<DynamicSymbols>> DynamicSymbols::CreateFromSystemLoader() {
   auto syms = make_ref<DynamicSymbols>();
   syms->loader_library_ = std::move(loader_library);
 
+
+
   auto* loader_library_ptr = syms->loader_library_.get();
+
+#define CU_PFN_DECL(cudaSymbolName)                                           \
+  {                                                                           \
+    using FuncPtrT = std::add_pointer<decltype(::cudaSymbolName)>::type;      \
+    static const char* kName = #cudaSymbolName;                               \
+    syms->cudaSymbolName = syms->loader_library_->GetSymbol<FuncPtrT>(kName); \
+    if (!syms->cudaSymbolName) {                                              \
+      return UnavailableErrorBuilder(IREE_LOC)                                \
+             << "Required method " << kName << " not found in cuda library";  \
+    }                                                                         \
+  }
+
+#include "dynamic_symbol_tables.def"
+#undef CU_PFN_DECL
+
+
   return syms;
 }
 

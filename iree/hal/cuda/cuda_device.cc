@@ -154,6 +154,7 @@ iree_status_t iree_hal_cuda_device_create(
     CUdevice physical_device, iree_allocator_t host_allocator,
     iree_hal_device_t** out_device) {
   DynamicSymbols* instance_syms = (DynamicSymbols*)opaque_syms;
+  
   // TODO: code to create the CUDA device
   return iree_ok_status();
 }

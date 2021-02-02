@@ -85,7 +85,6 @@ iree_cc_library(
     iree::base::tracing
   PUBLIC
 )
-  return()
 
 iree_cc_test(
   NAME

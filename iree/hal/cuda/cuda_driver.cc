@@ -157,10 +157,10 @@ IREE_API_EXPORT iree_status_t IREE_API_CALL iree_hal_cuda_driver_create(
   iree::Arena arena;
   iree_hal_cuda_string_list_t enabled_layers;
   iree_hal_cuda_string_list_t enabled_extensions;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_cuda_driver_compute_enabled_extensibility_sets(
-          syms, options->requested_features, &arena, &enabled_layers,
-          &enabled_extensions));
+//  IREE_RETURN_IF_ERROR(
+//      iree_hal_cuda_driver_compute_enabled_extensibility_sets(
+//          syms, options->requested_features, &arena, &enabled_layers,
+//          &enabled_extensions));
 
   iree_status_t status = iree_hal_cuda_driver_create_internal(
         identifier, options, &enabled_extensions, opaque_syms, host_allocator,
@@ -176,7 +176,7 @@ static iree_status_t iree_hal_cuda_driver_enumerate_physical_devices(
     iree_allocator_t host_allocator, uint32_t* out_physical_device_count,
     CUdevice** out_physical_devices) {
 
-  uint32_t device_count = 0;
+  uint32_t device_count = 1;
   
  // CUDA_RETURN_IF_ERROR(
  //     syms->cuDeviceGetCount(&device_count, "Failed to get device count"));
@@ -188,9 +188,10 @@ static iree_status_t iree_hal_cuda_driver_enumerate_physical_devices(
 
   for (uint32_t device_ordinal = 0; device_ordinal < device_count;
        ++device_ordinal) {
-    CUdevice device = 0;
+    //CUdevice device = 0;
   //  CUDA_RETURN_IF_ERROR(cuDeviceGet(&device, device_ordinal), "Failed to get the device");
-    *out_physical_devices[device_ordinal] = device;
+    *out_physical_devices = physical_devices;
+    *out_physical_device_count = 1;
   }
   return iree_ok_status();
 }

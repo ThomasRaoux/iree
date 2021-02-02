@@ -50,8 +50,6 @@ cc_library(
         "direct_command_queue.h",
         "emulated_semaphore.cc",
         "emulated_semaphore.h",
-        "extensibility_util.cc",
-        "extensibility_util.h",
         "handle_util.h",
         "status_util.c",
         "status_util.h",
