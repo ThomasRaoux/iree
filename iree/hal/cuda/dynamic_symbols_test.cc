@@ -22,17 +22,22 @@ namespace hal {
 namespace cuda {
 namespace {
 
+#define CUDE_CHECK_ERRORS(expr)     \
+  {                                 \
+    CUresult status = expr;         \
+    ASSERT_EQ(CUDA_SUCCESS, status); \
+  }
+
 TEST(DynamicSymbolsTest, CreateFromSystemLoader) {
   auto status_or_syms = DynamicSymbols::CreateFromSystemLoader();
   IREE_ASSERT_OK(status_or_syms);
   ref_ptr<DynamicSymbols> syms = std::move(status_or_syms.value());
   
   int device_count = 0;
-  CUresult status;
-  status = syms->cuInit(0);
-  ASSERT_EQ(CUDA_SUCCESS, status);
-  status = syms->cuDeviceGetCount(&device_count);
-  ASSERT_EQ(CUDA_SUCCESS, status);
+  CUDE_CHECK_ERRORS(syms->cuInit(0));
+  CUDE_CHECK_ERRORS(syms->cuDeviceGetCount(&device_count));
+  CUdevice device;
+  CUDE_CHECK_ERRORS(syms->cuDeviceGet(&device, /*ordinal=*/0));
 }
 
 }  // namespace

@@ -80,6 +80,9 @@ typedef struct {
 
   CUdevice physical_device;
 
+  CUstream stream;
+  CUcontext context;
+
   iree_allocator_t host_allocator;
   iree_hal_allocator_t* device_allocator;
 
@@ -146,17 +149,47 @@ static iree_status_t iree_hal_cuda_device_query_extensibility_set(
   return iree_ok_status();
 }
 
+static iree_status_t iree_hal_cuda_device_create_internal(
+    iree_hal_driver_t* driver, iree_string_view_t identifier,
+    CUdevice physical_device, CUstream stream, CUcontext context,
+    iree_allocator_t host_allocator, iree_hal_device_t** out_device) {
+  iree_hal_cuda_device_t* device = NULL;
+  iree_host_size_t total_size = sizeof(*device) + identifier.size;
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(host_allocator, total_size, (void**)&device));
+  memset(device, 0, total_size);
+  iree_hal_resource_initialize(&iree_hal_cuda_device_vtable,
+                               &device->resource);
+  device->host_allocator = host_allocator;
+  device->driver = driver;
+  iree_hal_driver_retain(device->driver);
+  uint8_t* buffer_ptr = (uint8_t*)device + sizeof(*device);
+  buffer_ptr += iree_string_view_append_to_buffer(
+      identifier, &device->identifier, (char*)buffer_ptr);
+  device->physical_device = physical_device;
+  device->stream = stream;
+  device->context = context;
+  *out_device = (iree_hal_device_t*)device;
+  return iree_ok_status();
+}
+
 iree_status_t iree_hal_cuda_device_create(
     iree_hal_driver_t* driver, iree_string_view_t identifier,
     iree_hal_cuda_features_t enabled_features,
     const iree_hal_cuda_device_options_t* options,
     iree_hal_cuda_syms_t* opaque_syms,
-    CUdevice physical_device, iree_allocator_t host_allocator,
+    CUdevice device, iree_allocator_t host_allocator,
     iree_hal_device_t** out_device) {
-  DynamicSymbols* instance_syms = (DynamicSymbols*)opaque_syms;
+  DynamicSymbols* syms = (DynamicSymbols*)opaque_syms;
   
-  // TODO: code to create the CUDA device
-  return iree_ok_status();
+  CUcontext context;
+  CUDA_RETURN_IF_ERROR(syms, cuCtxCreate(&context, 0, device),
+                       "cuCtxCreate");
+  CUstream stream;
+  CUDA_RETURN_IF_ERROR(syms, cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING),
+                       "cuStreamCreate");
+  return iree_hal_cuda_device_create_internal(
+      driver, identifier, device, stream, context, host_allocator, out_device);
 }
 
 static iree_string_view_t iree_hal_cuda_device_id(

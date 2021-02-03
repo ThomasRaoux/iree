@@ -26,7 +26,6 @@
 #include "iree/base/dynamic_library.h"
 #include "iree/base/ref_ptr.h"
 #include "iree/base/status.h"
-//#include "iree/hal/cuda/dynamic_symbol_tables.h"
 
 namespace iree {
 namespace hal {

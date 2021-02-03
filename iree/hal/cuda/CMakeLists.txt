@@ -38,7 +38,7 @@ iree_cc_library(
     "direct_command_queue.cc"
     "direct_command_queue.h"
     "handle_util.h"
-    "status_util.c"
+    "status_util.cc"
     "status_util.h"
   DEPS
     ::dynamic_symbols

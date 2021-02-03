@@ -21,6 +21,14 @@
 
 #include "iree/base/api.h"
 
+namespace iree {
+namespace hal {
+namespace cuda {
+struct DynamicSymbols;
+}
+}  // namespace hal
+}  // namespace iree
+
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
@@ -29,29 +37,32 @@ extern "C" {
 //
 // Usage:
 //   iree_status_t status = CU_RESULT_TO_STATUS(cuDoThing(...));
-#define CU_RESULT_TO_STATUS(expr, ...) \
-  iree_hal_cuda_result_to_status((expr), __FILE__, __LINE__)
+#define CU_RESULT_TO_STATUS(syms, expr, ...) \
+  iree_hal_cuda_result_to_status(syms, (syms->expr), __FILE__, __LINE__)
 
 // IREE_RETURN_IF_ERROR but implicitly converts the CUresult return value to
 // a Status.
 //
 // Usage:
 //   CUDA_RETURN_IF_ERROR(cuDoThing(...), "message");
-#define CUDA_RETURN_IF_ERROR(expr, ...) \
-  IREE_RETURN_IF_ERROR(               \
-      iree_hal_cuda_result_to_status(expr, __FILE__, __LINE__), __VA_ARGS__)
+#define CUDA_RETURN_IF_ERROR(syms, expr, ...)                                     \
+  IREE_RETURN_IF_ERROR(                                                     \
+      iree_hal_cuda_result_to_status(syms, syms->expr, __FILE__, __LINE__), \
+      __VA_ARGS__)
 
 // IREE-CHECK_OK but implicitly converts the CUresult return value to a
 // ::util::Status and checks that it is OkStatus.
 //
 // Usage:
 //   CUDA_CHECK_OK(cuDoThing(...));
-#define CUDA_CHECK_OK(expr) \
-  IREE_CHECK_OK(::iree::hal::cuda::CudaResultToStatus(expr, __FILE__, __LINE__))
+#define CUDA_CHECK_OK(syms, expr) \
+  IREE_CHECK_OK(                  \
+      iree_hal_cuda_result_to_status(syms, syms->expr, __FILE__, __LINE__))
 
 // Converts a CUresult to a Status object.
-iree_status_t iree_hal_cuda_result_to_status(CUresult result,
-                                               const char* file, uint32_t line);
+iree_status_t iree_hal_cuda_result_to_status(
+    iree::hal::cuda::DynamicSymbols* syms, CUresult result, const char* file,
+    uint32_t line);
 
 #ifdef __cplusplus
 }  // extern "C"

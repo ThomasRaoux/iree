@@ -13,21 +13,23 @@
 // limitations under the License.
 
 #include "iree/hal/cuda/status_util.h"
+#include "iree/hal/cuda/dynamic_symbols.h"
 
-iree_status_t iree_hal_cuda_result_to_status(CUresult result,
+iree_status_t iree_hal_cuda_result_to_status(iree::hal::cuda::DynamicSymbols* syms, 
+                                              CUresult result,
                                                const char* file,
                                                uint32_t line) {
   if (result == CUDA_SUCCESS) {
-    iree_ok_status();
+    return iree_ok_status();
   }
 
   const char* error_name;
-  if (cuGetErrorName(result, &error_name) != CUDA_SUCCESS) {
+  if (syms->cuGetErrorName(result, &error_name) != CUDA_SUCCESS) {
     error_name = "UNKNOWN";
   }
 
   const char* error_string;
-  if (cuGetErrorString(result, &error_string) != CUDA_SUCCESS) {
+  if (syms->cuGetErrorString(result, &error_string) != CUDA_SUCCESS) {
     error_string = "Unknown error.";
   }
   return iree_make_status(IREE_STATUS_INTERNAL,

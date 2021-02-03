@@ -23,7 +23,6 @@
 #include "iree/base/status.h"
 #include "iree/base/target_platform.h"
 #include "iree/base/tracing.h"
-//#include "iree/hal/cuda/dynamic_symbol_tables.h"
 
 namespace iree {
 namespace hal {
@@ -55,8 +54,6 @@ StatusOr<ref_ptr<DynamicSymbols>> DynamicSymbols::CreateFromSystemLoader() {
   auto syms = make_ref<DynamicSymbols>();
   syms->loader_library_ = std::move(loader_library);
 
-
-
   auto* loader_library_ptr = syms->loader_library_.get();
 
 #define CU_PFN_DECL(cudaSymbolName)                                           \
@@ -72,7 +69,6 @@ StatusOr<ref_ptr<DynamicSymbols>> DynamicSymbols::CreateFromSystemLoader() {
 
 #include "dynamic_symbol_tables.def"
 #undef CU_PFN_DECL
-
 
   return syms;
 }
