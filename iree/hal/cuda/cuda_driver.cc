@@ -19,7 +19,6 @@
 #include "iree/base/memory.h"
 #include "iree/base/tracing.h"
 #include "iree/hal/cuda/api.h"
-#include "iree/hal/cuda/debug_reporter.h"
 #include "iree/hal/cuda/dynamic_symbols.h"
 #include "iree/hal/cuda/extensibility_util.h"
 #include "iree/hal/cuda/status_util.h"
@@ -45,9 +44,7 @@ typedef struct {
   // different function pointers for device-specific functions that change
   // behavior with enabled layers/extensions.
   iree::ref_ptr<DynamicSymbols> syms;
-
-  // Optional debug reporter: may be disabled or unavailable (no debug layers).
-  iree_hal_cuda_debug_reporter_t* debug_reporter;
+  
 } iree_hal_cuda_driver_t;
 
 // Pick a fixed lenght size for device names.
@@ -79,17 +76,11 @@ static iree_status_t iree_hal_cuda_driver_create_internal(
     iree_hal_driver_t** out_driver) {
   auto* syms = (DynamicSymbols*)opaque_syms;
 
-  iree_hal_cuda_debug_reporter_t* debug_reporter = NULL;
 
   iree_hal_cuda_driver_t* driver = NULL;
   iree_host_size_t total_size = sizeof(*driver) + identifier.size;
   iree_status_t status =
       iree_allocator_malloc(host_allocator, total_size, (void**)&driver);
-  if (!iree_status_is_ok(status)) {
-    // Need to clean up if we fail (as we own these).
-    iree_hal_cuda_debug_reporter_free(debug_reporter);
-    return status;
-  }
   iree_hal_resource_initialize(&iree_hal_cuda_driver_vtable,
                                &driver->resource);
   driver->host_allocator = host_allocator;
@@ -101,7 +92,6 @@ static iree_status_t iree_hal_cuda_driver_create_internal(
   driver->default_device_index = options->default_device_index;
   driver->enabled_features = options->requested_features;
   driver->syms = iree::add_ref(syms);
-  driver->debug_reporter = debug_reporter;
   *out_driver = (iree_hal_driver_t*)driver;
   return status;
 }
@@ -110,8 +100,6 @@ static void iree_hal_cuda_driver_destroy(iree_hal_driver_t* base_driver) {
   iree_hal_cuda_driver_t* driver = iree_hal_cuda_driver_cast(base_driver);
   iree_allocator_t host_allocator = driver->host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
-
-  iree_hal_cuda_debug_reporter_free(driver->debug_reporter);
 
   driver->syms.reset();
   iree_allocator_free(host_allocator, driver);

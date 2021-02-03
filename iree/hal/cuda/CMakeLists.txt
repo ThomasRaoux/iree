@@ -31,8 +31,6 @@ iree_cc_library(
     "cuda_device.cc"
     "cuda_driver.cc"
     "cuda_headers.h"
-    "debug_reporter.cc"
-    "debug_reporter.h"
     "direct_command_buffer.cc"
     "direct_command_buffer.h"
     "direct_command_queue.cc"
