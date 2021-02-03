@@ -28,6 +28,8 @@ iree_cc_library(
   SRCS
     "api.cc"
     "command_queue.h"
+    "cuda_allocator.cc"
+    "cuda_buffer.cc"
     "cuda_device.cc"
     "cuda_driver.cc"
     "cuda_headers.h"

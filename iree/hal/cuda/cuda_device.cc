@@ -25,10 +25,11 @@
 #include "iree/base/status.h"
 #include "iree/base/tracing.h"
 #include "iree/hal/cuda/api.h"
+#include "iree/hal/cuda/cuda_allocator.h"
 #include "iree/hal/cuda/command_queue.h"
 #include "iree/hal/cuda/direct_command_buffer.h"
 #include "iree/hal/cuda/direct_command_queue.h"
-//#include "iree/hal/cuda/dynamic_symbols.h"
+#include "iree/hal/cuda/dynamic_symbols.h"
 #include "iree/hal/cuda/handle_util.h"
 #include "iree/hal/cuda/status_util.h"
 
@@ -173,7 +174,13 @@ static iree_status_t iree_hal_cuda_device_create_internal(
   device->context = context_wrapper->value();
   device->context_wrapper = context_wrapper;
   *out_device = (iree_hal_device_t*)device;
-  return iree_ok_status();
+
+  iree_status_t status = iree_hal_cuda_allocator_create(
+      device->context, context_wrapper->syms().get(),
+      host_allocator,
+      &device->device_allocator);
+
+  return status;
 }
 
 iree_status_t iree_hal_cuda_device_create(
