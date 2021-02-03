@@ -25,7 +25,7 @@ namespace hal {
 namespace cuda {
 
 DirectCommandQueue::DirectCommandQueue(
-    CuDeviceHandle* logical_device, std::string name,
+    CuContextHandle* logical_device, std::string name,
     iree_hal_command_category_t supported_categories, CUstream queue)
     : CommandQueue(logical_device, std::move(name), supported_categories,
                    queue) {}

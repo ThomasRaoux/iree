@@ -52,7 +52,7 @@ class CommandQueue {
   virtual iree_status_t WaitIdle(iree_time_t deadline_ns) = 0;
 
  protected:
-  CommandQueue(CuDeviceHandle* logical_device, std::string name,
+  CommandQueue(CuContextHandle* logical_device, std::string name,
                iree_hal_command_category_t supported_categories, CUstream queue)
       : logical_device_(logical_device),
         name_(std::move(name)),
@@ -61,7 +61,7 @@ class CommandQueue {
     iree_slim_mutex_initialize(&queue_mutex_);
   }
 
-  CuDeviceHandle* logical_device_;
+  CuContextHandle* logical_device_;
   const std::string name_;
   const iree_hal_command_category_t supported_categories_;
 

@@ -27,11 +27,9 @@ using namespace iree::hal::cuda;
 // indirection.
 typedef struct {
   iree_hal_resource_t resource;
-  CuDeviceHandle* logical_device;
+  CuContextHandle* logical_device;
   iree_hal_command_buffer_mode_t mode;
   iree_hal_command_category_t allowed_categories;
-
-  CuCommandPoolHandle* command_pool;
 
   DynamicSymbols* syms;
 
@@ -53,13 +51,11 @@ iree_hal_cuda_direct_command_buffer_cast(
 }
 
 iree_status_t iree_hal_cuda_direct_command_buffer_allocate(
-    iree::hal::cuda::CuDeviceHandle* logical_device,
-    iree::hal::cuda::CuCommandPoolHandle* command_pool,
+    iree::hal::cuda::CuContextHandle* logical_device,
     iree_hal_command_buffer_mode_t mode,
     iree_hal_command_category_t command_categories,
     iree_hal_command_buffer_t** out_command_buffer) {
   IREE_ASSERT_ARGUMENT(logical_device);
-  IREE_ASSERT_ARGUMENT(command_pool);
   IREE_ASSERT_ARGUMENT(out_command_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);
 

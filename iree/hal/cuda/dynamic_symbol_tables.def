@@ -1,4 +1,5 @@
   CU_PFN_DECL(cuCtxCreate)
+  CU_PFN_DECL(cuCtxDestroy)
   CU_PFN_DECL(cuCtxEnablePeerAccess)
   CU_PFN_DECL(cuCtxGetCurrent)
   CU_PFN_DECL(cuCtxGetDevice) 

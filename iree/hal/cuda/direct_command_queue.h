@@ -25,7 +25,7 @@ namespace cuda {
 // Command queue implementation directly maps to CUstream.
 class DirectCommandQueue final : public CommandQueue {
  public:
-  DirectCommandQueue(CuDeviceHandle* logical_device, std::string name,
+  DirectCommandQueue(CuContextHandle* logical_device, std::string name,
                      iree_hal_command_category_t supported_categories,
                      CUstream queue);
   ~DirectCommandQueue() override;

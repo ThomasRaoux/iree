@@ -82,6 +82,7 @@ typedef struct {
 
   CUstream stream;
   CUcontext context;
+  CuContextHandle* context_wrapper;
 
   iree_allocator_t host_allocator;
   iree_hal_allocator_t* device_allocator;
@@ -151,7 +152,8 @@ static iree_status_t iree_hal_cuda_device_query_extensibility_set(
 
 static iree_status_t iree_hal_cuda_device_create_internal(
     iree_hal_driver_t* driver, iree_string_view_t identifier,
-    CUdevice physical_device, CUstream stream, CUcontext context,
+    CUdevice physical_device, CUstream stream,
+    CuContextHandle* context_wrapper,
     iree_allocator_t host_allocator, iree_hal_device_t** out_device) {
   iree_hal_cuda_device_t* device = NULL;
   iree_host_size_t total_size = sizeof(*device) + identifier.size;
@@ -168,7 +170,8 @@ static iree_status_t iree_hal_cuda_device_create_internal(
       identifier, &device->identifier, (char*)buffer_ptr);
   device->physical_device = physical_device;
   device->stream = stream;
-  device->context = context;
+  device->context = context_wrapper->value();
+  device->context_wrapper = context_wrapper;
   *out_device = (iree_hal_device_t*)device;
   return iree_ok_status();
 }
@@ -182,14 +185,18 @@ iree_status_t iree_hal_cuda_device_create(
     iree_hal_device_t** out_device) {
   DynamicSymbols* syms = (DynamicSymbols*)opaque_syms;
   
-  CUcontext context;
-  CUDA_RETURN_IF_ERROR(syms, cuCtxCreate(&context, 0, device),
+  auto* context_wrapper = new CuContextHandle(
+      syms, /*owns_context=*/true, host_allocator);
+  CUDA_RETURN_IF_ERROR(syms,
+                       cuCtxCreate(context_wrapper->mutable_value(), 0, device),
                        "cuCtxCreate");
   CUstream stream;
   CUDA_RETURN_IF_ERROR(syms, cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING),
                        "cuStreamCreate");
-  return iree_hal_cuda_device_create_internal(
-      driver, identifier, device, stream, context, host_allocator, out_device);
+
+  return iree_hal_cuda_device_create_internal(driver, identifier, device,
+                                              stream, context_wrapper,
+                                              host_allocator, out_device);
 }
 
 static iree_string_view_t iree_hal_cuda_device_id(

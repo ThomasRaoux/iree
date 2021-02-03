@@ -24,8 +24,7 @@ extern "C" {
 
 // Creates a command buffer that directly records into a VkCommandBuffer.
 iree_status_t iree_hal_cuda_direct_command_buffer_allocate(
-    iree::hal::cuda::CuDeviceHandle* logical_device,
-    iree::hal::cuda::CuCommandPoolHandle* command_pool,
+    iree::hal::cuda::CuContextHandle* logical_device,
     iree_hal_command_buffer_mode_t mode,
     iree_hal_command_category_t command_categories,
     iree_hal_command_buffer_t** out_command_buffer);
