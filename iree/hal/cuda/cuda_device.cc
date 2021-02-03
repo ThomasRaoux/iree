@@ -26,9 +26,6 @@
 #include "iree/base/tracing.h"
 #include "iree/hal/cuda/api.h"
 #include "iree/hal/cuda/cuda_allocator.h"
-#include "iree/hal/cuda/command_queue.h"
-#include "iree/hal/cuda/direct_command_buffer.h"
-#include "iree/hal/cuda/direct_command_queue.h"
 #include "iree/hal/cuda/dynamic_symbols.h"
 #include "iree/hal/cuda/handle_util.h"
 #include "iree/hal/cuda/status_util.h"
@@ -88,18 +85,6 @@ typedef struct {
   iree_allocator_t host_allocator;
   iree_hal_allocator_t* device_allocator;
 
-  // All queues available on the device; the device owns these.
-  iree_host_size_t queue_count;
-  CommandQueue** queues;
-  // The subset of queues that support dispatch operations. May overlap with
-  // transfer_queues.
-  iree_host_size_t dispatch_queue_count;
-  CommandQueue** dispatch_queues;
-  // The subset of queues that support transfer operations. May overlap with
-  // dispatch_queues.
-  iree_host_size_t transfer_queue_count;
-  CommandQueue** transfer_queues;
-
 } iree_hal_cuda_device_t;
 
 extern const iree_hal_device_vtable_t iree_hal_cuda_device_vtable;
@@ -120,11 +105,6 @@ static void iree_hal_cuda_device_destroy(iree_hal_device_t* base_device) {
   iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
   iree_allocator_t host_allocator = iree_hal_device_host_allocator(base_device);
   IREE_TRACE_ZONE_BEGIN(z0);
-
-  // Drop all command queues. These may wait until idle in their destructor.
-  for (iree_host_size_t i = 0; i < device->queue_count; ++i) {
-    delete device->queues[i];
-  }
 
   // There should be no more buffers live that use the allocator.
   iree_hal_allocator_release(device->device_allocator);
@@ -290,28 +270,16 @@ static iree_status_t iree_hal_cuda_device_create_semaphore(
                           "semaphore not implemented");      
 }
 
-// Returns the queue to submit work to based on the |queue_affinity|.
-static CommandQueue* iree_hal_cuda_device_select_queue(
-    iree_hal_cuda_device_t* device,
-    iree_hal_command_category_t command_categories, uint64_t queue_affinity) {
-  // TODO(benvanik): meaningful heuristics for affinity. We don't generate
-  // anything from the compiler that uses multiple queues and until we do it's
-  // best not to do anything too clever here.
-  if (command_categories == IREE_HAL_COMMAND_CATEGORY_TRANSFER) {
-    return device
-        ->transfer_queues[queue_affinity % device->transfer_queue_count];
-  }
-  return device->dispatch_queues[queue_affinity % device->dispatch_queue_count];
-}
-
 static iree_status_t iree_hal_cuda_device_queue_submit(
     iree_hal_device_t* base_device,
     iree_hal_command_category_t command_categories, uint64_t queue_affinity,
     iree_host_size_t batch_count, const iree_hal_submission_batch_t* batches) {
-  iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
+ /* iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
   CommandQueue* queue = iree_hal_cuda_device_select_queue(
       device, command_categories, queue_affinity);
-  return queue->Submit(batch_count, batches);
+  return queue->Submit(batch_count, batches);*/
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "semaphore not implemented");   
 }
 
 static iree_status_t iree_hal_cuda_device_wait_semaphores_with_timeout(
@@ -338,10 +306,10 @@ static iree_status_t iree_hal_cuda_device_wait_idle_with_deadline(
     return CU_RESULT_TO_STATUS(device->logical_device->syms()->vkDeviceWaitIdle(
                                    *device->logical_device),
                                "vkDeviceWaitIdle");
-  }*/
+  }
   for (iree_host_size_t i = 0; i < device->queue_count; ++i) {
     IREE_RETURN_IF_ERROR(device->queues[i]->WaitIdle(deadline_ns));
-  }
+  }*/
   return iree_ok_status();
 }
 
