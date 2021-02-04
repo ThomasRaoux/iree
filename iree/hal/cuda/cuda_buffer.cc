@@ -135,6 +135,12 @@ static iree_status_t iree_hal_cuda_buffer_flush_range(
   return iree_ok_status();
 }
 
+void* iree_hal_cuda_buffer_base_pointer(iree_hal_buffer_t* base_buffer) {
+  iree_hal_cuda_buffer_t* buffer =
+      iree_hal_cuda_buffer_cast(base_buffer);
+  return buffer->pointer;
+}
+
 const iree_hal_buffer_vtable_t iree_hal_cuda_buffer_vtable = {
     /*.destroy=*/iree_hal_cuda_buffer_destroy,
     /*.map_range=*/iree_hal_cuda_buffer_map_range,

@@ -12,31 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef IREE_HAL_CUDA_ALLOCATOR_H_
-#define IREE_HAL_CUDA_ALLOCATOR_H_
+#ifndef IREE_HAL_CUDA_GRAPH_COMMAND_BUFFER_H_
+#define IREE_HAL_CUDA_GRAPH_COMMAND_BUFFER_H_
 
 #include "iree/hal/api.h"
-#include "iree/hal/cuda/handle_util.h"
-#include "iree/hal/cuda/status_util.h"
+#include "iree/hal/cuda/dynamic_symbols.h"
+#include "iree/hal/cuda/cuda_headers.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
 
-// Create a cuda allocator.
-iree_status_t iree_hal_cuda_allocator_create(
+// Creates a cuda graph.
+iree_status_t iree_hal_cuda_graph_command_buffer_allocate(
     CUcontext context,
     iree::hal::cuda::DynamicSymbols* syms,
     iree_allocator_t host_allocator,
-    iree_hal_allocator_t** out_allocator);
+    iree_hal_command_buffer_mode_t mode,
+    iree_hal_command_category_t command_categories,
+    iree_hal_command_buffer_t** out_command_buffer);
 
-// Free an allocation represent by the given |pointer|.
-void iree_hal_cuda_allocator_free(iree_hal_allocator_t* allocator,
-                                  void* pointer,
-                                  iree_hal_memory_type_t memory_type);
+// Returns the native cuda graph associated to the command buffer.
+CUgraphExec iree_hal_cuda_graph_command_buffer_exec(
+    const iree_hal_command_buffer_t* command_buffer);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // IREE_HAL_CUDA_ALLOCATOR_H_
+#endif  // IREE_HAL_CUDA_GRAPH_COMMAND_BUFFER_H_

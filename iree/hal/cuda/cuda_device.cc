@@ -29,6 +29,7 @@
 #include "iree/hal/cuda/dynamic_symbols.h"
 #include "iree/hal/cuda/handle_util.h"
 #include "iree/hal/cuda/status_util.h"
+#include "iree/hal/cuda/graph_command_buffer.h"
 
 using namespace iree::hal::cuda;
 
@@ -78,6 +79,7 @@ typedef struct {
 
   CUdevice physical_device;
 
+  // TODO: support multiple streams.
   CUstream stream;
   CUcontext context;
   CuContextHandle* context_wrapper;
@@ -106,8 +108,11 @@ static void iree_hal_cuda_device_destroy(iree_hal_device_t* base_device) {
   iree_allocator_t host_allocator = iree_hal_device_host_allocator(base_device);
   IREE_TRACE_ZONE_BEGIN(z0);
 
+
   // There should be no more buffers live that use the allocator.
   iree_hal_allocator_release(device->device_allocator);
+  CUDA_CHECK_OK(device->context_wrapper->syms().get(),
+                cuStreamDestroy(device->stream));
 
   // Finally, destroy the device.
   iree_hal_driver_release(device->driver);
@@ -208,9 +213,11 @@ static iree_status_t iree_hal_cuda_device_create_command_buffer(
     iree_hal_device_t* base_device, iree_hal_command_buffer_mode_t mode,
     iree_hal_command_category_t command_categories,
     iree_hal_command_buffer_t** out_command_buffer) {
-
-  // TODO: code to create the command buffer
-  return iree_ok_status();
+  iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
+  return iree_hal_cuda_graph_command_buffer_allocate(
+      device->context, device->context_wrapper->syms().get(),
+      device->context_wrapper->host_allocator(), mode, command_categories,
+      out_command_buffer);
 }
 
 static iree_status_t iree_hal_cuda_device_create_descriptor_set(
@@ -274,12 +281,20 @@ static iree_status_t iree_hal_cuda_device_queue_submit(
     iree_hal_device_t* base_device,
     iree_hal_command_category_t command_categories, uint64_t queue_affinity,
     iree_host_size_t batch_count, const iree_hal_submission_batch_t* batches) {
- /* iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
-  CommandQueue* queue = iree_hal_cuda_device_select_queue(
-      device, command_categories, queue_affinity);
-  return queue->Submit(batch_count, batches);*/
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "semaphore not implemented");   
+  iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
+  for (int i = 0; i < batch_count; i++) {
+    for (int j = 0; j < batches[i].command_buffer_count; j++) {
+      CUgraphExec exec = iree_hal_cuda_graph_command_buffer_exec(
+          batches[i].command_buffers[j]);
+      CUDA_RETURN_IF_ERROR(device->context_wrapper->syms().get(),
+                           cuGraphLaunch(exec, device->stream),
+                           "cuGraphLaunch");
+    }
+    CUDA_RETURN_IF_ERROR(device->context_wrapper->syms().get(),
+                         cuStreamSynchronize(device->stream),
+                         "cuStreamSynchronize");
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_cuda_device_wait_semaphores_with_timeout(
