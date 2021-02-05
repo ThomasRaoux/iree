@@ -247,8 +247,32 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_copy_buffer(
     iree_hal_buffer_t* source_buffer, iree_device_size_t source_offset,
     iree_hal_buffer_t* target_buffer, iree_device_size_t target_offset,
     iree_device_size_t length) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "need cuda implementation");
+  iree_hal_cuda_graph_command_buffer_t* command_buffer =
+      iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
+
+  CUdeviceptr target_device_buffer = iree_hal_cuda_buffer_device_pointer(
+      iree_hal_buffer_allocated_buffer(target_buffer));
+  target_offset += iree_hal_buffer_byte_offset(target_buffer);
+  CUdeviceptr source_device_buffer = iree_hal_cuda_buffer_device_pointer(
+      iree_hal_buffer_allocated_buffer(source_buffer));
+  source_offset += iree_hal_buffer_byte_offset(source_buffer);
+  CUgraphNode node;
+  CUDA_MEMCPY3D params = {};
+  params.Depth = 1;
+  params.Height = 1;
+  params.WidthInBytes = length;
+  params.dstDevice = target_device_buffer;
+  params.srcDevice = source_device_buffer;
+  params.srcXInBytes = source_offset;
+  params.dstXInBytes = target_offset;
+  params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
+  params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+  CUDA_RETURN_IF_ERROR(
+      command_buffer->syms,
+      cuGraphAddMemcpyNode(&node, command_buffer->graph, nullptr, 0, &params,
+                           command_buffer->context),
+      "cuGraphAddMemcpyNode");
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_push_constants(
