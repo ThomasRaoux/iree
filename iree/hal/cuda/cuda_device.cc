@@ -26,6 +26,7 @@
 #include "iree/base/tracing.h"
 #include "iree/hal/cuda/api.h"
 #include "iree/hal/cuda/cuda_allocator.h"
+#include "iree/hal/cuda/event_semaphore.h"
 #include "iree/hal/cuda/dynamic_symbols.h"
 #include "iree/hal/cuda/handle_util.h"
 #include "iree/hal/cuda/status_util.h"
@@ -273,8 +274,10 @@ static iree_status_t iree_hal_cuda_device_create_executable_layout(
 static iree_status_t iree_hal_cuda_device_create_semaphore(
     iree_hal_device_t* base_device, uint64_t initial_value,
     iree_hal_semaphore_t** out_semaphore) {
- return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "semaphore not implemented");      
+  iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
+  return iree_hal_cuda_semaphore_create(
+      device->context, device->context_wrapper->syms().get(),
+      device->context_wrapper->host_allocator(), initial_value, out_semaphore);
 }
 
 static iree_status_t iree_hal_cuda_device_queue_submit(
@@ -290,10 +293,10 @@ static iree_status_t iree_hal_cuda_device_queue_submit(
                            cuGraphLaunch(exec, device->stream),
                            "cuGraphLaunch");
     }
-    CUDA_RETURN_IF_ERROR(device->context_wrapper->syms().get(),
-                         cuStreamSynchronize(device->stream),
-                         "cuStreamSynchronize");
   }
+  CUDA_RETURN_IF_ERROR(device->context_wrapper->syms().get(),
+                       cuStreamSynchronize(device->stream),
+                       "cuStreamSynchronize");
   return iree_ok_status();
 }
 

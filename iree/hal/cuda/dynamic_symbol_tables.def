@@ -45,6 +45,7 @@
   CU_PFN_DECL(cuMemGetAddressRange)   
   CU_PFN_DECL(cuMemGetInfo)   
   CU_PFN_DECL(cuMemHostAlloc) 
+  CU_PFN_DECL(cuMemHostGetDevicePointer)
   CU_PFN_DECL(cuMemHostRegister)      
   CU_PFN_DECL(cuMemHostUnregister)    
   CU_PFN_DECL(cuMemcpyDtoD)   

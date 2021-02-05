@@ -21,7 +21,8 @@
 typedef struct iree_hal_cuda_buffer_s {
   iree_hal_buffer_t base;
 
-  void* pointer;
+  void* host_ptr = NULL;
+  CUdeviceptr device_ptr;
 } iree_hal_cuda_buffer_t;
 
 extern const iree_hal_buffer_vtable_t iree_hal_cuda_buffer_vtable;
@@ -37,9 +38,8 @@ iree_status_t iree_hal_cuda_buffer_wrap(
     iree_hal_memory_access_t allowed_access,
     iree_hal_buffer_usage_t allowed_usage, iree_device_size_t allocation_size,
     iree_device_size_t byte_offset, iree_device_size_t byte_length,
-    void* pointer, iree_hal_buffer_t** out_buffer) {
+    CUdeviceptr device_ptr, void* host_ptr, iree_hal_buffer_t** out_buffer) {
   IREE_ASSERT_ARGUMENT(allocator);
-  IREE_ASSERT_ARGUMENT(pointer);
   IREE_ASSERT_ARGUMENT(out_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);
 
@@ -58,7 +58,8 @@ iree_status_t iree_hal_cuda_buffer_wrap(
     buffer->base.memory_type = memory_type;
     buffer->base.allowed_access = allowed_access;
     buffer->base.allowed_usage = allowed_usage;
-    buffer->pointer = pointer;
+    buffer->host_ptr = host_ptr;
+    buffer->device_ptr = device_ptr;
     *out_buffer = &buffer->base;
   }
 
@@ -73,17 +74,11 @@ static void iree_hal_cuda_buffer_destroy(iree_hal_buffer_t* base_buffer) {
       iree_hal_allocator_host_allocator(iree_hal_buffer_allocator(base_buffer));
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  iree_hal_cuda_allocator_free(buffer->base.allocator, buffer->pointer,
-                               buffer->base.memory_type);
+  iree_hal_cuda_allocator_free(buffer->base.allocator, buffer->device_ptr,
+                               buffer->host_ptr, buffer->base.memory_type);
   iree_allocator_free(host_allocator, buffer);
 
   IREE_TRACE_ZONE_END(z0);
-}
-
-void* iree_hal_cuda_buffer_handle(iree_hal_buffer_t* base_buffer) {
-  iree_hal_cuda_buffer_t* buffer =
-      iree_hal_cuda_buffer_cast(base_buffer);
-  return buffer->pointer;
 }
 
 static iree_status_t iree_hal_cuda_buffer_map_range(
@@ -101,7 +96,7 @@ static iree_status_t iree_hal_cuda_buffer_map_range(
   }
 
   uint8_t* data_ptr =
-      static_cast<uint8_t*>(buffer->pointer) + local_byte_offset;
+      static_cast<uint8_t*>(buffer->host_ptr) + local_byte_offset;
   // If we mapped for discard scribble over the bytes. This is not a mandated
   // behavior but it will make debugging issues easier. Alternatively for
   // heap buffers we could reallocate them such that ASAN yells, but that
@@ -135,10 +130,10 @@ static iree_status_t iree_hal_cuda_buffer_flush_range(
   return iree_ok_status();
 }
 
-void* iree_hal_cuda_buffer_base_pointer(iree_hal_buffer_t* base_buffer) {
+CUdeviceptr iree_hal_cuda_buffer_device_pointer(iree_hal_buffer_t* base_buffer) {
   iree_hal_cuda_buffer_t* buffer =
       iree_hal_cuda_buffer_cast(base_buffer);
-  return buffer->pointer;
+  return buffer->device_ptr;
 }
 
 const iree_hal_buffer_vtable_t iree_hal_cuda_buffer_vtable = {

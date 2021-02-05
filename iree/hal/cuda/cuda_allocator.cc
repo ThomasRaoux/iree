@@ -123,8 +123,8 @@ static iree_status_t iree_hal_cuda_allocator_make_compatible(
 }
 
 static iree_status_t iree_hal_cuda_allocator_allocate_internal(
-    iree_hal_cuda_allocator_t* allocator,
-    iree_hal_memory_type_t memory_type, iree_hal_buffer_usage_t allowed_usage,
+    iree_hal_cuda_allocator_t* allocator, iree_hal_memory_type_t memory_type,
+    iree_hal_buffer_usage_t allowed_usage,
     iree_hal_memory_access_t allowed_access, size_t allocation_size,
     iree_hal_buffer_t** out_buffer) {
   // Guard against the corner case where the requested buffer size is 0. The
@@ -132,27 +132,31 @@ static iree_status_t iree_hal_cuda_allocator_allocate_internal(
   // it can happen in real world use cases. So we should at least not crash.
   if (allocation_size == 0) allocation_size = 4;
 
-  void* pointer = nullptr;
+  void* host_ptr = NULL;
+  CUdeviceptr device_ptr = NULL;
   if (iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_VISIBLE)) {
     auto flags = CU_MEMHOSTALLOC_DEVICEMAP;
     if (!iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_CACHED)) {
       flags |= CU_MEMHOSTALLOC_WRITECOMBINED;
     }
     CUDA_RETURN_IF_ERROR(allocator->syms,
-                         cuMemHostAlloc(&pointer, allocation_size, flags),
+                         cuMemHostAlloc(&host_ptr, allocation_size, flags),
                          "cuMemHostAlloc");
-  } else {
     CUDA_RETURN_IF_ERROR(
         allocator->syms,
-        cuMemAlloc(reinterpret_cast<CUdeviceptr*>(&pointer), allocation_size),
-        "cuMemAlloc");
+        cuMemHostGetDevicePointer(&device_ptr, host_ptr, /*flags=*/0),
+        "cuMemHostGetDevicePointer");
+  } else {
+    CUDA_RETURN_IF_ERROR(allocator->syms,
+                         cuMemAlloc(&device_ptr, allocation_size),
+                         "cuMemAlloc");
   }
 
   return iree_hal_cuda_buffer_wrap(
       (iree_hal_allocator_t*)allocator, memory_type, allowed_access,
       allowed_usage, allocation_size,
       /*byte_offset=*/0,
-      /*byte_length=*/allocation_size, pointer, out_buffer);
+      /*byte_length=*/allocation_size, device_ptr, host_ptr, out_buffer);
 }
 
 static iree_status_t iree_hal_cuda_allocator_allocate_buffer(
@@ -173,15 +177,14 @@ static iree_status_t iree_hal_cuda_allocator_allocate_buffer(
 }
 
 void iree_hal_cuda_allocator_free(iree_hal_allocator_t* base_allocator,
-                                  void* pointer,
+                                  CUdeviceptr device_ptr, void* host_ptr,
                                   iree_hal_memory_type_t memory_type) {
   iree_hal_cuda_allocator_t* allocator =
       iree_hal_cuda_allocator_cast(base_allocator);
   if (iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_VISIBLE)) {
-    CUDA_CHECK_OK(allocator->syms, cuMemFreeHost(pointer));
+    CUDA_CHECK_OK(allocator->syms, cuMemFreeHost(host_ptr));
   } else {
-    CUDA_CHECK_OK(allocator->syms,
-                  cuMemFree(*reinterpret_cast<CUdeviceptr*>(&pointer)));
+    CUDA_CHECK_OK(allocator->syms, cuMemFree(device_ptr));
   }
 }
 

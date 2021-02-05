@@ -16,6 +16,7 @@
 #define IREE_HAL_CUDA_BUFFER_H_
 
 #include "iree/hal/api.h"
+#include "iree/hal/cuda/cuda_headers.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,12 +28,12 @@ iree_status_t iree_hal_cuda_buffer_wrap(
     iree_hal_memory_access_t allowed_access,
     iree_hal_buffer_usage_t allowed_usage, iree_device_size_t allocation_size,
     iree_device_size_t byte_offset, iree_device_size_t byte_length,
-    void* pointer, iree_hal_buffer_t** out_buffer);
+    CUdeviceptr device_ptr, void* host_ptr, iree_hal_buffer_t** out_buffer);
 
 // Returns the cuda base pointer for the given |buffer|.
 // This is the entire allocated_buffer and must be offset by the buffer
 // byte_offset and byte_length when used.
-void* iree_hal_cuda_buffer_base_pointer(iree_hal_buffer_t* buffer);
+CUdeviceptr iree_hal_cuda_buffer_device_pointer(iree_hal_buffer_t* buffer);
 
 #ifdef __cplusplus
 }  // extern "C"

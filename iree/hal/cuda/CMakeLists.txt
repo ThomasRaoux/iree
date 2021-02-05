@@ -32,6 +32,7 @@ iree_cc_library(
     "cuda_device.cc"
     "cuda_driver.cc"
     "cuda_headers.h"
+    "event_semaphore.cc"
     "graph_command_buffer.cc"
     "handle_util.h"
     "status_util.cc"

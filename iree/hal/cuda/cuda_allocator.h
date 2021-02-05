@@ -32,7 +32,7 @@ iree_status_t iree_hal_cuda_allocator_create(
 
 // Free an allocation represent by the given |pointer|.
 void iree_hal_cuda_allocator_free(iree_hal_allocator_t* allocator,
-                                  void* pointer,
+                                  CUdeviceptr device_ptr, void* host_ptr,
                                   iree_hal_memory_type_t memory_type);
 
 #ifdef __cplusplus

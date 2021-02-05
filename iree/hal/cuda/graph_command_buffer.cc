@@ -213,13 +213,13 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_fill_buffer(
   iree_hal_cuda_graph_command_buffer_t* command_buffer =
       iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
 
-  void* target_device_buffer = iree_hal_cuda_buffer_base_pointer(
+  CUdeviceptr target_device_buffer = iree_hal_cuda_buffer_device_pointer(
       iree_hal_buffer_allocated_buffer(target_buffer));
   target_offset += iree_hal_buffer_byte_offset(target_buffer);
   uint32_t dword_pattern = splat_pattern(pattern, pattern_length);
   CUgraphNode node;
   CUDA_MEMSET_NODE_PARAMS params = {};
-  params.dst = (CUdeviceptr)(target_device_buffer) + target_offset;
+  params.dst = target_device_buffer + target_offset;
   params.elementSize = pattern_length;
   params.width = length;
   params.height = 1;
