@@ -31,6 +31,7 @@
   CU_PFN_DECL(cuGetErrorString)
   CU_PFN_DECL(cuGraphAddMemcpyNode)
   CU_PFN_DECL(cuGraphAddMemsetNode)
+  CU_PFN_DECL(cuGraphAddKernelNode)
   CU_PFN_DECL(cuGraphCreate)
   CU_PFN_DECL(cuGraphDestroy)
   CU_PFN_DECL(cuGraphExecDestroy)

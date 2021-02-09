@@ -32,9 +32,13 @@ iree_cc_library(
     "cuda_device.cc"
     "cuda_driver.cc"
     "cuda_headers.h"
+    "descriptor_set_layout.cc"
     "event_semaphore.cc"
+    "executable_layout.cc"
     "graph_command_buffer.cc"
     "handle_util.h"
+    "native_executable.cc"
+    "nop_executable_cache.cc"
     "status_util.cc"
     "status_util.h"
   DEPS

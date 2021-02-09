@@ -146,7 +146,8 @@ static iree_status_t iree_hal_cuda_allocator_allocate_internal(
         allocator->syms,
         cuMemHostGetDevicePointer(&device_ptr, host_ptr, /*flags=*/0),
         "cuMemHostGetDevicePointer");
-  } else {
+  } 
+  else {
     CUDA_RETURN_IF_ERROR(allocator->syms,
                          cuMemAlloc(&device_ptr, allocation_size),
                          "cuMemAlloc");

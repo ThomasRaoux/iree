@@ -19,12 +19,12 @@
 
 using namespace iree::hal::cuda;
 
-static const iree_hal_executable_format_t kExecutableFormatSpirV =
-    iree_hal_make_executable_format("SPVE");
+static const iree_hal_executable_format_t kExecutableFormatPTX =
+    iree_hal_make_executable_format("PTXE");
 
 typedef struct {
   iree_hal_resource_t resource;
-  CuContextHandle* logical_device;
+  iree::hal::cuda::CuContextHandle* logical_device;
 } iree_hal_cuda_nop_executable_cache_t;
 
 extern const iree_hal_executable_cache_vtable_t
@@ -57,7 +57,6 @@ iree_status_t iree_hal_cuda_nop_executable_cache_create(
 
     *out_executable_cache = (iree_hal_executable_cache_t*)executable_cache;
   }
-
   IREE_TRACE_ZONE_END(z0);
   return status;
 }
@@ -77,22 +76,20 @@ static void iree_hal_cuda_nop_executable_cache_destroy(
 
 static bool iree_hal_cuda_nop_executable_cache_can_prepare_format(
     iree_hal_executable_cache_t* base_executable_cache,
-    iree_hal_executable_format_t format) {
-  return format == kExecutableFormatSpirV;
+    iree_hal_executable_caching_mode_t caching_mode,
+    iree_hal_executable_format_t executable_format) {
+  return executable_format == kExecutableFormatPTX;
 }
 
 static iree_status_t iree_hal_cuda_nop_executable_cache_prepare_executable(
     iree_hal_executable_cache_t* base_executable_cache,
-    iree_hal_executable_layout_t* executable_layout,
-    iree_hal_executable_caching_mode_t caching_mode,
-    iree_const_byte_span_t executable_data,
+    const iree_hal_executable_spec_t* executable_spec,
     iree_hal_executable_t** out_executable) {
   iree_hal_cuda_nop_executable_cache_t* executable_cache =
       iree_hal_cuda_nop_executable_cache_cast(base_executable_cache);
   return iree_hal_cuda_native_executable_create(
       executable_cache->logical_device,
-      /*pipeline_cache=*/NULL, executable_layout, caching_mode,
-      executable_data, out_executable);
+      executable_spec, out_executable);
 }
 
 const iree_hal_executable_cache_vtable_t

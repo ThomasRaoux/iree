@@ -26,6 +26,10 @@
 #include "iree/base/tracing.h"
 #include "iree/hal/cuda/api.h"
 #include "iree/hal/cuda/cuda_allocator.h"
+#include "iree/hal/cuda/executable_layout.h"
+#include "iree/hal/cuda/nop_executable_cache.h"
+#include "iree/hal/cuda/descriptor_set_layout.h"
+
 #include "iree/hal/cuda/event_semaphore.h"
 #include "iree/hal/cuda/dynamic_symbols.h"
 #include "iree/hal/cuda/handle_util.h"
@@ -239,11 +243,9 @@ static iree_status_t iree_hal_cuda_device_create_descriptor_set_layout(
     const iree_hal_descriptor_set_layout_binding_t* bindings,
     iree_hal_descriptor_set_layout_t** out_descriptor_set_layout) {
   iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "not implemented yet for CUDA");
-  /*return iree_hal_cuda_native_descriptor_set_layout_create(
-      device->logical_device, usage_type, binding_count, bindings,
-      out_descriptor_set_layout);*/
+  return iree_hal_cuda_descriptor_set_layout_create(
+      device->context_wrapper, usage_type, binding_count, bindings,
+      out_descriptor_set_layout);
 }
 
 static iree_status_t iree_hal_cuda_device_create_event(
@@ -257,8 +259,8 @@ static iree_status_t iree_hal_cuda_device_create_executable_cache(
     iree_hal_device_t* base_device, iree_string_view_t identifier,
     iree_hal_executable_cache_t** out_executable_cache) {
   iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "not implemented yet for CUDA");
+  return iree_hal_cuda_nop_executable_cache_create(
+      device->context_wrapper, identifier, out_executable_cache);
 }
 
 static iree_status_t iree_hal_cuda_device_create_executable_layout(
@@ -267,8 +269,9 @@ static iree_status_t iree_hal_cuda_device_create_executable_layout(
     iree_host_size_t push_constants,
     iree_hal_executable_layout_t** out_executable_layout) {
   iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "not implemented yet for CUDA");
+  return iree_hal_cuda_executable_layout_create(
+      device->context_wrapper, set_layout_count, set_layouts, push_constants,
+      out_executable_layout);
 }
 
 static iree_status_t iree_hal_cuda_device_create_semaphore(
