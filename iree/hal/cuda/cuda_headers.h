@@ -15,6 +15,6 @@
 #ifndef IREE_HAL_CUDA_CUDA_HEADERS_H_
 #define IREE_HAL_CUDA_CUDA_HEADERS_H_
 
-#include "/usr/local/cuda-11.0/include/cuda.h"
+#include "cuda.h"
 
 #endif  // IREE_HAL_CUDA_CUDA_HEADERS_H_

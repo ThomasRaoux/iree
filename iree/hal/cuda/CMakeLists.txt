@@ -50,6 +50,7 @@ iree_cc_library(
     absl::span
     absl::strings
     absl::synchronization
+    cuda_headers
     iree::base::api
     iree::base::arena
     iree::base::core_headers
@@ -79,6 +80,7 @@ iree_cc_library(
     absl::memory
     absl::span
     absl::strings
+    cuda_headers
     iree::base::core_headers
     iree::base::dynamic_library
     iree::base::ref_ptr
