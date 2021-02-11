@@ -78,3 +78,16 @@ flatbuffer_c_library(
     "--json"
   PUBLIC
 )
+
+flatbuffer_c_library(
+  NAME
+    cuda_executable_def_c_fbs
+  SRCS
+    "cuda_executable_def.fbs"
+  FLATCC_ARGS
+    "--reader"
+    "--builder"
+    "--verifier"
+    "--json"
+  PUBLIC
+)

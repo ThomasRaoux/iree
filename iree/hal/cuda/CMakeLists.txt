@@ -62,6 +62,7 @@ iree_cc_library(
     iree::base::synchronization
     iree::base::tracing
     iree::hal::api
+    iree::schemas::cuda_executable_def_c_fbs
   PUBLIC
 )
 

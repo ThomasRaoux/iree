@@ -21,8 +21,8 @@
 
 // flatcc schemas:
 #include "iree/base/flatcc.h"
-//#include "iree/schemas/spirv_executable_def_reader.h"
-//#include "iree/schemas/spirv_executable_def_verifier.h"
+#include "iree/schemas/cuda_executable_def_reader.h"
+#include "iree/schemas/cuda_executable_def_verifier.h"
 
 
 typedef struct {
