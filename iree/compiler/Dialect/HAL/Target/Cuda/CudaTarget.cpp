@@ -106,13 +106,18 @@ class CudaTargetBackend final : public TargetBackend {
     for (auto halOp : halInterfaceOps) {
       halOp.erase();
     }
+    // Workaround: Invalidate the debug location on purpose as CUDA driver
+    // doesn't seem to diggest the debug info well.
+    innerModuleOp.walk([&](Operation *op) {
+      op->setLoc(UnknownLoc::get(innerModuleOp.getContext()));
+    });
+
     auto llvmModule =
         mlir::translateModuleToNVVMIR(innerModuleOp, context, libraryName);
     if (!llvmModule) {
       return targetOp.emitError() << "failed to translate the MLIR LLVM "
                                      "dialect to the native llvm::Module";
     }
-
     for (auto func : innerModuleOp.getOps<LLVM::LLVMFuncOp>()) {
       auto *llvmFunc = llvmModule->getFunction(func.getName());
 

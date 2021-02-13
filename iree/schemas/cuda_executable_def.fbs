@@ -36,7 +36,7 @@ table CudaExecutableDef {
   // in Cuda it is set by the runtime.
   block_sizes:[BlockSize];
 
-  // Serialized CUDA binary
+  // Serialized ptx string.
   kernel_library:[ubyte];
 }
 
