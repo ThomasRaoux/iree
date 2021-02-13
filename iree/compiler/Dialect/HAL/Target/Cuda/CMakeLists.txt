@@ -31,10 +31,13 @@ iree_cc_library(
     MLIRIR
     MLIRPass
     MLIRSupport
+    MLIRTargetNVVMIR
     iree::base::flatcc
+    iree::compiler::Conversion::LinalgToNVVM
     iree::compiler::Dialect::Flow::IR
     iree::compiler::Dialect::HAL::Target
     iree::compiler::Utils
     iree::schemas::cuda_executable_def_c_fbs
+    LLVMNVPTXCodeGen
   PUBLIC
 )
