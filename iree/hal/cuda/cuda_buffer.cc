@@ -20,7 +20,6 @@
 
 typedef struct iree_hal_cuda_buffer_s {
   iree_hal_buffer_t base;
-
   void* host_ptr = NULL;
   CUdeviceptr device_ptr;
 } iree_hal_cuda_buffer_t;

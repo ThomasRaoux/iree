@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC
+// Copyright 2021 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,22 +22,27 @@ namespace hal {
 namespace cuda {
 namespace {
 
-#define CUDE_CHECK_ERRORS(expr)     \
-  {                                 \
-    CUresult status = expr;         \
+#define CUDE_CHECK_ERRORS(expr)      \
+  {                                  \
+    CUresult status = expr;          \
     ASSERT_EQ(CUDA_SUCCESS, status); \
   }
 
 TEST(DynamicSymbolsTest, CreateFromSystemLoader) {
-  auto status_or_syms = DynamicSymbols::CreateFromSystemLoader();
-  IREE_ASSERT_OK(status_or_syms);
-  ref_ptr<DynamicSymbols> syms = std::move(status_or_syms.value());
-  
+  DynamicSymbols symbols;
+  Status status = symbols.LoadSymbols();
+  if (!status.ok()) {
+    IREE_LOG(WARNING) << "Symbols cannot be loaded, skipping test.";
+    GTEST_SKIP();
+  }
+
   int device_count = 0;
-  CUDE_CHECK_ERRORS(syms->cuInit(0));
-  CUDE_CHECK_ERRORS(syms->cuDeviceGetCount(&device_count));
-  CUdevice device;
-  CUDE_CHECK_ERRORS(syms->cuDeviceGet(&device, /*ordinal=*/0));
+  CUDE_CHECK_ERRORS(symbols.cuInit(0));
+  CUDE_CHECK_ERRORS(symbols.cuDeviceGetCount(&device_count));
+  if (device_count > 0) {
+    CUdevice device;
+    CUDE_CHECK_ERRORS(symbols.cuDeviceGet(&device, /*ordinal=*/0));
+  }
 }
 
 }  // namespace

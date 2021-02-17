@@ -16,7 +16,7 @@
 #define IREE_HAL_CUDA_EXECUTABLE_LAYOUT_H_
 
 #include "iree/hal/api.h"
-#include "iree/hal/cuda/handle_util.h"
+#include "iree/hal/cuda/context_wrapper.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,7 +24,7 @@ extern "C" {
 
 // Creates the kernel arguments.
 iree_status_t iree_hal_cuda_executable_layout_create(
-    iree::hal::cuda::CuContextHandle* logical_device,
+    iree_hal_cuda_context_wrapper_t* context,
     iree_host_size_t set_layout_count,
     iree_hal_descriptor_set_layout_t** set_layouts,
     iree_host_size_t push_constant_count,

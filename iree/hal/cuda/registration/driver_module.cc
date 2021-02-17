@@ -25,30 +25,6 @@
 
 #define IREE_HAL_CUDA_DRIVER_ID 0x43554441u  // CUDA
 
-static iree_status_t iree_hal_cuda_create_driver_with_flags(
-    iree_string_view_t identifier, iree_allocator_t allocator,
-    iree_hal_driver_t** out_driver) {
-  IREE_TRACE_SCOPE();
-
-  // Setup driver options from flags. We do this here as we want to enable other
-  // consumers that may not be using modules/command line flags to be able to
-  // set their options however they want.
-  iree_hal_cuda_driver_options_t driver_options;
-  iree_hal_cuda_driver_options_initialize(&driver_options);
-
-  // Load the Cuda library. This will fail if the library cannot be found or
-  // does not have the expected functions.
-  iree_hal_cuda_syms_t* syms = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_cuda_syms_create_from_system_loader(allocator, &syms));
-
-  iree_status_t status = iree_hal_cuda_driver_create(
-      identifier, &driver_options, syms, allocator, out_driver);
-
-  iree_hal_cuda_syms_release(syms);
-  return status;
-}
-
 static iree_status_t iree_hal_cuda_driver_factory_enumerate(
     void* self, const iree_hal_driver_info_t** out_driver_infos,
     iree_host_size_t* out_driver_info_count) {
@@ -77,8 +53,14 @@ static iree_status_t iree_hal_cuda_driver_factory_try_create(
   // can name them here:
   iree_string_view_t identifier = iree_make_cstring_view("cuda");
 
-  return iree_hal_cuda_create_driver_with_flags(identifier, allocator,
-                                                  out_driver);
+  // Setup driver options from flags. We do this here as we want to enable other
+  // consumers that may not be using modules/command line flags to be able to
+  // set their options however they want.
+  iree_hal_cuda_driver_options_t driver_options;
+  iree_hal_cuda_driver_options_initialize(&driver_options);
+  
+  return iree_hal_cuda_driver_create(
+      identifier, &driver_options, allocator, out_driver);
 }
 
 IREE_API_EXPORT iree_status_t IREE_API_CALL

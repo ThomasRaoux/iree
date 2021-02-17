@@ -26,7 +26,7 @@ iree_cc_library(
     "cuda_device.h"
     "cuda_driver.h"
   SRCS
-    "api.cc"
+    "context_wrapper.h"
     "cuda_allocator.cc"
     "cuda_buffer.cc"
     "cuda_device.cc"
@@ -36,7 +36,6 @@ iree_cc_library(
     "event_semaphore.cc"
     "executable_layout.cc"
     "graph_command_buffer.cc"
-    "handle_util.h"
     "native_executable.cc"
     "nop_executable_cache.cc"
     "status_util.cc"

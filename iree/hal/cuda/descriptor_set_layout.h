@@ -16,14 +16,14 @@
 #define IREE_HAL_CUDA_DESCRIPTOR_SET_LAYOUT_H_
 
 #include "iree/hal/api.h"
-#include "iree/hal/cuda/handle_util.h"
+#include "iree/hal/cuda/context_wrapper.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
 
 iree_status_t iree_hal_cuda_descriptor_set_layout_create(
-    iree::hal::cuda::CuContextHandle* logical_device,
+    iree_hal_cuda_context_wrapper_t* context,
     iree_hal_descriptor_set_layout_usage_type_t usage_type,
     iree_host_size_t binding_count,
     const iree_hal_descriptor_set_layout_binding_t* bindings,

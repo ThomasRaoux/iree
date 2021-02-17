@@ -35,13 +35,5 @@ iree_status_t iree_hal_cuda_result_to_status(iree::hal::cuda::DynamicSymbols* sy
   return iree_make_status(IREE_STATUS_INTERNAL,
                           "CUDA driver error '%s' (%d): %s", error_name, result,
                           error_string);
-  // TODO(thomasraoux): print better error for out of memory.
-  /*if (result == CUDA_ERROR_OUT_OF_MEMORY) {
-    size_t free, total;
-    if (cuMemGetInfo(&free, &total) == CUDA_SUCCESS) {
-      error_message +=
-          absl::StrFormat("\n%zu bytes free of %zu bytes total.", free, total);
-    }
-  }*/
   
 }

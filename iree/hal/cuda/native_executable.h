@@ -16,7 +16,7 @@
 #define IREE_HAL_CUDA_NATIVE_EXECUTABLE_H_
 
 #include "iree/hal/api.h"
-#include "iree/hal/cuda/handle_util.h"
+#include "iree/hal/cuda/context_wrapper.h"
 #include "iree/hal/cuda/cuda_headers.h"
 
 #ifdef __cplusplus
@@ -27,7 +27,7 @@ extern "C" {
 // IREE executable. Each of the pipelines will share the same shader module
 // and just differs by the entry point into the shader module they reference.
 iree_status_t iree_hal_cuda_native_executable_create(
-    iree::hal::cuda::CuContextHandle* logical_device,
+    iree_hal_cuda_context_wrapper_t* context,
     const iree_hal_executable_spec_t* executable_spec,
     iree_hal_executable_t** out_executable);
 

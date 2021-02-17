@@ -15,17 +15,14 @@
 #ifndef IREE_HAL_CUDA_STATUS_UTIL_H_
 #define IREE_HAL_CUDA_STATUS_UTIL_H_
 
-// clang-format off: Must be included before all other headers:
 #include "iree/hal/cuda/cuda_headers.h"
-// clang-format on
-
 #include "iree/base/api.h"
 
 namespace iree {
 namespace hal {
 namespace cuda {
 struct DynamicSymbols;
-}
+}  // namespace cuda
 }  // namespace hal
 }  // namespace iree
 

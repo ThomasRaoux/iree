@@ -16,7 +16,6 @@
 
 #include "iree/base/memory.h"
 #include "iree/base/tracing.h"
-#include "iree/hal/cuda/handle_util.h"
 #include "iree/hal/cuda/status_util.h"
 
 // flatcc schemas:
@@ -27,7 +26,7 @@
 
 typedef struct {
   iree_hal_resource_t resource;
-  iree::hal::cuda::CuContextHandle* logical_device;
+  iree_hal_cuda_context_wrapper_t* context;
   iree_host_size_t entry_count;
   CUmodule module;
   CUfunction entry_functions[];
@@ -43,10 +42,10 @@ iree_hal_cuda_native_executable_cast(iree_hal_executable_t* base_value) {
 }
 
 iree_status_t iree_hal_cuda_native_executable_create(
-    iree::hal::cuda::CuContextHandle* logical_device,
+    iree_hal_cuda_context_wrapper_t* context,
     const iree_hal_executable_spec_t* executable_spec,
     iree_hal_executable_t** out_executable) {
-  IREE_ASSERT_ARGUMENT(logical_device);
+  IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(executable_spec);
   IREE_ASSERT_ARGUMENT(out_executable);
   *out_executable = NULL;
@@ -67,7 +66,7 @@ iree_status_t iree_hal_cuda_native_executable_create(
       flatbuffers_string_vec_len(entry_points_vec);
   iree_host_size_t total_size =
       sizeof(*executable) + entry_count * sizeof(CUfunction);
-  iree_status_t status = iree_allocator_malloc(logical_device->host_allocator(),
+  iree_status_t status = iree_allocator_malloc(context->host_allocator,
                                                total_size, (void**)&executable);
   char log_buffer[1024 * 1024] = {};
   CUjit_option jit_options[] = {CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES,
@@ -77,7 +76,7 @@ iree_status_t iree_hal_cuda_native_executable_create(
 
   CUmodule module = nullptr;
   CUDA_RETURN_IF_ERROR(
-      logical_device->syms().get(),
+      context->syms,
       cuModuleLoadDataEx(&module, kernel_code,
                          sizeof(jit_options) / sizeof(jit_options[0]),
                          jit_options, jit_values),
@@ -90,7 +89,7 @@ iree_status_t iree_hal_cuda_native_executable_create(
     CUfunction function = nullptr;
     const char* entry_name = flatbuffers_string_vec_at(entry_points_vec, i);
     CUDA_RETURN_IF_ERROR(
-        logical_device->syms().get(),
+        context->syms,
         cuModuleGetFunction(&function, module, entry_name),
         "cuModuleGetFunction");
     executable->entry_functions[i] = function;
@@ -99,7 +98,7 @@ iree_status_t iree_hal_cuda_native_executable_create(
   iree_hal_resource_initialize(&iree_hal_cuda_native_executable_vtable,
                                &executable->resource);
   executable->module = module;
-  executable->logical_device = logical_device;
+  executable->context = context;
   *out_executable = (iree_hal_executable_t*)executable;
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();
@@ -117,7 +116,7 @@ static void iree_hal_cuda_native_executable_destroy(
   iree_hal_cuda_native_executable_t* executable =
       iree_hal_cuda_native_executable_cast(base_executable);
   iree_allocator_t host_allocator =
-      executable->logical_device->host_allocator();
+      executable->context->host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
 
   iree_allocator_free(host_allocator, executable);

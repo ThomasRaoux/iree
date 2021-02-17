@@ -24,9 +24,7 @@
 // indirection.
 typedef struct {
   iree_hal_resource_t resource;
-  CUcontext context;
-  iree::hal::cuda::DynamicSymbols* syms;
-  iree_allocator_t host_allocator;
+  iree_hal_cuda_context_wrapper_t* context;
   iree_hal_command_buffer_mode_t mode;
   iree_hal_command_category_t allowed_categories;
   CUgraph graph;
@@ -46,36 +44,32 @@ iree_hal_cuda_graph_command_buffer_cast(iree_hal_command_buffer_t* base_value) {
 }
 
 iree_status_t iree_hal_cuda_graph_command_buffer_allocate(
-    CUcontext context,
-    iree::hal::cuda::DynamicSymbols* syms,
-    iree_allocator_t host_allocator,
+    iree_hal_cuda_context_wrapper_t* context,
     iree_hal_command_buffer_mode_t mode,
     iree_hal_command_category_t command_categories,
     iree_hal_command_buffer_t** out_command_buffer) {
   IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(syms);
   IREE_ASSERT_ARGUMENT(out_command_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);
 
   CUgraph graph;
-  CUDA_RETURN_IF_ERROR(syms, cuGraphCreate(&graph, /*flags=*/0), "cuGraphCreate");
+  CUDA_RETURN_IF_ERROR(context->syms, cuGraphCreate(&graph, /*flags=*/0),
+                       "cuGraphCreate");
 
   iree_hal_cuda_graph_command_buffer_t* command_buffer = NULL;
   iree_status_t status = iree_allocator_malloc(
-      host_allocator, sizeof(*command_buffer), (void**)&command_buffer);
+      context->host_allocator, sizeof(*command_buffer), (void**)&command_buffer);
   if (iree_status_is_ok(status)) {
     iree_hal_resource_initialize(&iree_hal_cuda_graph_command_buffer_vtable,
                                  &command_buffer->resource);
     command_buffer->context = context;
     command_buffer->mode = mode;
     command_buffer->allowed_categories = command_categories;
-    command_buffer->syms = syms;
     command_buffer->graph = graph;
-    command_buffer->host_allocator = host_allocator;
     command_buffer->current_descriptor = NULL;
     *out_command_buffer = (iree_hal_command_buffer_t*)command_buffer;
   } else {
-    syms->cuGraphDestroy(graph);
+    context->syms->cuGraphDestroy(graph);
   }
 
   IREE_TRACE_ZONE_END(z0);
@@ -88,9 +82,9 @@ static void iree_hal_cuda_graph_command_buffer_destroy(
       iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  CUDA_CHECK_OK(command_buffer->syms, cuGraphDestroy(command_buffer->graph));
-  //CUDA_CHECK_OK(command_buffer->syms, cuGraphExecDestroy(command_buffer->exec));
-  iree_allocator_free(command_buffer->host_allocator, command_buffer);
+  CUDA_CHECK_OK(command_buffer->context->syms, cuGraphDestroy(command_buffer->graph));
+  //CUDA_CHECK_OK(command_buffer->context->syms, cuGraphExecDestroy(command_buffer->exec));
+  iree_allocator_free(command_buffer->context->host_allocator, command_buffer);
 
   IREE_TRACE_ZONE_END(z0);
 }
@@ -123,14 +117,14 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_end(
 
   size_t num_nodes;
   CUDA_RETURN_IF_ERROR(
-      command_buffer->syms,
+      command_buffer->context->syms,
       cuGraphGetNodes(command_buffer->graph, nullptr, &num_nodes),
       "cuGraphGetNodes");
   IREE_DVLOG(2) << "Instantiating graph with " << num_nodes << " nodes";
 
   CUgraphNode error_node;
   char log[1024];
-  auto result = command_buffer->syms->cuGraphInstantiate(
+  auto result = command_buffer->context->syms->cuGraphInstantiate(
       &command_buffer->exec, command_buffer->graph, &error_node, log,
       sizeof(log));
   // CUDA_RETURN_IF_ERROR(cuGraphDestroy(command_buffer->graph));
@@ -230,9 +224,9 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_fill_buffer(
   params.height = 1;
   params.value = dword_pattern;
   CUDA_RETURN_IF_ERROR(
-      command_buffer->syms,
+      command_buffer->context->syms,
       cuGraphAddMemsetNode(&node, command_buffer->graph, nullptr, 0, &params,
-                           command_buffer->context),
+                           command_buffer->context->cu_context),
       "cuGraphAddMemsetNode");
   return iree_ok_status();
 }
@@ -271,9 +265,9 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_copy_buffer(
   params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
   params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
   CUDA_RETURN_IF_ERROR(
-      command_buffer->syms,
+      command_buffer->context->syms,
       cuGraphAddMemcpyNode(&node, command_buffer->graph, nullptr, 0, &params,
-                           command_buffer->context),
+                           command_buffer->context->cu_context),
       "cuGraphAddMemcpyNode");
   return iree_ok_status();
 }
@@ -296,7 +290,7 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_push_descriptor_set(
   void** arguments;
 
   iree_status_t status = iree_allocator_malloc(
-      command_buffer->host_allocator,
+      command_buffer->context->host_allocator,
       binding_count * sizeof(void*) + binding_count * sizeof(CUdeviceptr),
       (void**)&arguments);
   CUdeviceptr* device_ptrs = (CUdeviceptr*)(arguments + binding_count);
@@ -326,6 +320,7 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_dispatch(
     uint32_t workgroup_x, uint32_t workgroup_y, uint32_t workgroup_z) {
   iree_hal_cuda_graph_command_buffer_t* command_buffer =
       iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
+  iree::hal::cuda::DynamicSymbols* syms = command_buffer->context->syms;
 
   CUDA_KERNEL_NODE_PARAMS params = {};
   params.func =
@@ -339,25 +334,25 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_dispatch(
   params.kernelParams = command_buffer->current_descriptor;
 
   CUgraphNode node;
-  CUDA_RETURN_IF_ERROR(command_buffer->syms,
+  CUDA_RETURN_IF_ERROR(syms,
                        cuGraphAddKernelNode(&node, command_buffer->graph,
                                             nullptr, 0, &params),
                        "cuGraphAddKernelNode");
 
   CUgraphNode error_node;
   char log[1024];
-  auto result = command_buffer->syms->cuGraphInstantiate(
+  auto result = syms->cuGraphInstantiate(
       &command_buffer->exec, command_buffer->graph, &error_node, log,
       sizeof(log));
 
   CUstream stream;
-  CUDA_RETURN_IF_ERROR(command_buffer->syms,
+  CUDA_RETURN_IF_ERROR(syms,
                        cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING),
                        "cuStreamCreate");
-  CUDA_RETURN_IF_ERROR(command_buffer->syms,
+  CUDA_RETURN_IF_ERROR(syms,
                            cuGraphLaunch(command_buffer->exec, stream),
                            "cuGraphLaunch");   
-  CUDA_RETURN_IF_ERROR(command_buffer->syms,
+  CUDA_RETURN_IF_ERROR(syms,
                        cuStreamSynchronize(stream),
                        "cuStreamSynchronize");                    
   return iree_ok_status();

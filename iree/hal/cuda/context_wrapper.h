@@ -1,4 +1,4 @@
-// Copyright 2021 Google LLC
+// Copyright 2019 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef IREE_HAL_CUDA_SEMAPHORE_H_
-#define IREE_HAL_CUDA_SEMAPHORE_H_
+#ifndef IREE_HAL_CUDA_CONTEXT_WRAPPER_H_
+#define IREE_HAL_CUDA_CONTEXT_WRAPPER_H_
 
 #include "iree/hal/api.h"
-#include "iree/hal/cuda/context_wrapper.h"
-#include "iree/hal/cuda/status_util.h"
+#include "iree/hal/cuda/cuda_headers.h"
+#include "iree/hal/cuda/dynamic_symbols.h"
+// Structure to wrap all objects constant within a context. This makes it
+// simpler to pass it to the different objects and saves memory.
+typedef struct {
+  CUcontext cu_context;
+  iree_allocator_t host_allocator;
+  iree::hal::cuda::DynamicSymbols* syms;
+} iree_hal_cuda_context_wrapper_t;
 
-#ifdef __cplusplus
-extern "C" {
-#endif  // __cplusplus
-
-// Create a cuda allocator.
-iree_status_t iree_hal_cuda_semaphore_create(
-    iree_hal_cuda_context_wrapper_t* context,
-    uint64_t initial_value,
-    iree_hal_semaphore_t** out_semaphore);
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif  // __cplusplus
-
-#endif  // IREE_HAL_CUDA_SEMAPHORE_H_
+#endif  // IREE_HAL_CUDA_CONTEXT_WRAPPER_H_

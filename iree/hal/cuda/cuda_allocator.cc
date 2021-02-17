@@ -22,10 +22,7 @@ using namespace iree::hal::cuda;
 
 typedef struct iree_hal_cuda_allocator_s {
   iree_hal_resource_t resource;
-  iree_allocator_t host_allocator;
-  
-  iree::hal::cuda::DynamicSymbols* syms;
-  CUcontext context;
+  iree_hal_cuda_context_wrapper_t* context;
 } iree_hal_cuda_allocator_t;
 
 extern const iree_hal_allocator_vtable_t iree_hal_cuda_allocator_vtable;
@@ -37,22 +34,17 @@ static iree_hal_cuda_allocator_t* iree_hal_cuda_allocator_cast(
 }
 
 iree_status_t iree_hal_cuda_allocator_create(
-    CUcontext context, iree::hal::cuda::DynamicSymbols* syms,
-    iree_allocator_t host_allocator,
+    iree_hal_cuda_context_wrapper_t* context,
     iree_hal_allocator_t** out_allocator) {
   IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(syms);
-  IREE_ASSERT_ARGUMENT(out_allocator);
   IREE_TRACE_ZONE_BEGIN(z0);
   iree_hal_cuda_allocator_t* allocator = NULL;
   iree_status_t status = iree_allocator_malloc(
-      host_allocator, sizeof(*allocator), (void**)&allocator);
+      context->host_allocator, sizeof(*allocator), (void**)&allocator);
   if (iree_status_is_ok(status)) {
     iree_hal_resource_initialize(&iree_hal_cuda_allocator_vtable,
                                  &allocator->resource);
     allocator->context = context;
-    allocator->syms = syms;
-    allocator->host_allocator = host_allocator;
     *out_allocator = (iree_hal_allocator_t*)allocator;
   }
 
@@ -64,7 +56,7 @@ static void iree_hal_cuda_allocator_destroy(
     iree_hal_allocator_t* base_allocator) {
   iree_hal_cuda_allocator_t* allocator =
       iree_hal_cuda_allocator_cast(base_allocator);
-  iree_allocator_t host_allocator = allocator->host_allocator;
+  iree_allocator_t host_allocator = allocator->context->host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
 
   iree_allocator_free(host_allocator, allocator);
@@ -76,7 +68,7 @@ static iree_allocator_t iree_hal_cuda_allocator_host_allocator(
     const iree_hal_allocator_t* base_allocator) {
   iree_hal_cuda_allocator_t* allocator =
       (iree_hal_cuda_allocator_t*)base_allocator;
-  return allocator->host_allocator;
+  return allocator->context->host_allocator;
 }
 
 static iree_hal_buffer_compatibility_t
@@ -133,22 +125,22 @@ static iree_status_t iree_hal_cuda_allocator_allocate_internal(
   if (allocation_size == 0) allocation_size = 4;
 
   void* host_ptr = NULL;
-  CUdeviceptr device_ptr = NULL;
+  CUdeviceptr device_ptr = 0;
   if (iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_VISIBLE)) {
     auto flags = CU_MEMHOSTALLOC_DEVICEMAP;
     if (!iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_CACHED)) {
       flags |= CU_MEMHOSTALLOC_WRITECOMBINED;
     }
-    CUDA_RETURN_IF_ERROR(allocator->syms,
+    CUDA_RETURN_IF_ERROR(allocator->context->syms,
                          cuMemHostAlloc(&host_ptr, allocation_size, flags),
                          "cuMemHostAlloc");
     CUDA_RETURN_IF_ERROR(
-        allocator->syms,
+        allocator->context->syms,
         cuMemHostGetDevicePointer(&device_ptr, host_ptr, /*flags=*/0),
         "cuMemHostGetDevicePointer");
   } 
   else {
-    CUDA_RETURN_IF_ERROR(allocator->syms,
+    CUDA_RETURN_IF_ERROR(allocator->context->syms,
                          cuMemAlloc(&device_ptr, allocation_size),
                          "cuMemAlloc");
   }
@@ -183,9 +175,9 @@ void iree_hal_cuda_allocator_free(iree_hal_allocator_t* base_allocator,
   iree_hal_cuda_allocator_t* allocator =
       iree_hal_cuda_allocator_cast(base_allocator);
   if (iree_all_bits_set(memory_type, IREE_HAL_MEMORY_TYPE_HOST_VISIBLE)) {
-    CUDA_CHECK_OK(allocator->syms, cuMemFreeHost(host_ptr));
+    CUDA_CHECK_OK(allocator->context->syms, cuMemFreeHost(host_ptr));
   } else {
-    CUDA_CHECK_OK(allocator->syms, cuMemFree(device_ptr));
+    CUDA_CHECK_OK(allocator->context->syms, cuMemFree(device_ptr));
   }
 }
 

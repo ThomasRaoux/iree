@@ -24,7 +24,7 @@ static const iree_hal_executable_format_t kExecutableFormatPTX =
 
 typedef struct {
   iree_hal_resource_t resource;
-  iree::hal::cuda::CuContextHandle* logical_device;
+  iree_hal_cuda_context_wrapper_t* context;
 } iree_hal_cuda_nop_executable_cache_t;
 
 extern const iree_hal_executable_cache_vtable_t
@@ -39,7 +39,7 @@ iree_hal_cuda_nop_executable_cache_cast(
 }
 
 iree_status_t iree_hal_cuda_nop_executable_cache_create(
-    iree::hal::cuda::CuContextHandle* logical_device,
+    iree_hal_cuda_context_wrapper_t* context,
     iree_string_view_t identifier,
     iree_hal_executable_cache_t** out_executable_cache) {
   IREE_ASSERT_ARGUMENT(out_executable_cache);
@@ -47,13 +47,13 @@ iree_status_t iree_hal_cuda_nop_executable_cache_create(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   iree_hal_cuda_nop_executable_cache_t* executable_cache = NULL;
-  iree_status_t status = iree_allocator_malloc(logical_device->host_allocator(),
+  iree_status_t status = iree_allocator_malloc(context->host_allocator,
                                                sizeof(*executable_cache),
                                                (void**)&executable_cache);
   if (iree_status_is_ok(status)) {
     iree_hal_resource_initialize(&iree_hal_cuda_nop_executable_cache_vtable,
                                  &executable_cache->resource);
-    executable_cache->logical_device = logical_device;
+    executable_cache->context = context;
 
     *out_executable_cache = (iree_hal_executable_cache_t*)executable_cache;
   }
@@ -66,7 +66,7 @@ static void iree_hal_cuda_nop_executable_cache_destroy(
   iree_hal_cuda_nop_executable_cache_t* executable_cache =
       iree_hal_cuda_nop_executable_cache_cast(base_executable_cache);
   iree_allocator_t host_allocator =
-      executable_cache->logical_device->host_allocator();
+      executable_cache->context->host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
 
   iree_allocator_free(host_allocator, executable_cache);
@@ -88,7 +88,7 @@ static iree_status_t iree_hal_cuda_nop_executable_cache_prepare_executable(
   iree_hal_cuda_nop_executable_cache_t* executable_cache =
       iree_hal_cuda_nop_executable_cache_cast(base_executable_cache);
   return iree_hal_cuda_native_executable_create(
-      executable_cache->logical_device,
+      executable_cache->context,
       executable_spec, out_executable);
 }
 

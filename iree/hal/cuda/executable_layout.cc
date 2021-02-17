@@ -20,7 +20,7 @@
 
 typedef struct {
   iree_hal_resource_t resource;
-  iree::hal::cuda::CuContextHandle* logical_device;
+  iree_hal_cuda_context_wrapper_t* context;
   void** kernel_args;
   iree_host_size_t set_layout_count;
   iree_hal_descriptor_set_layout_t* set_layouts[];
@@ -38,12 +38,12 @@ iree_hal_cuda_executable_layout_cast(
 }
 
 iree_status_t iree_hal_cuda_executable_layout_create(
-    iree::hal::cuda::CuContextHandle* logical_device,
+    iree_hal_cuda_context_wrapper_t* context,
     iree_host_size_t set_layout_count,
     iree_hal_descriptor_set_layout_t** set_layouts,
     iree_host_size_t push_constant_count,
     iree_hal_executable_layout_t** out_executable_layout) {
-  IREE_ASSERT_ARGUMENT(logical_device);
+  IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(!set_layout_count || set_layouts);
   IREE_ASSERT_ARGUMENT(out_executable_layout);
   *out_executable_layout = NULL;
@@ -54,11 +54,11 @@ iree_status_t iree_hal_cuda_executable_layout_create(
       sizeof(*executable_layout) +
       set_layout_count * sizeof(*executable_layout->set_layouts);
   iree_status_t status = iree_allocator_malloc(
-      logical_device->host_allocator(), total_size, (void**)&executable_layout);
+      context->host_allocator, total_size, (void**)&executable_layout);
   if (iree_status_is_ok(status)) {
     iree_hal_resource_initialize(&iree_hal_cuda_executable_layout_vtable,
                                  &executable_layout->resource);
-    executable_layout->logical_device = logical_device;                                 
+    executable_layout->context = context;                                 
     *out_executable_layout = (iree_hal_executable_layout_t*)executable_layout;
   }
 
@@ -71,7 +71,7 @@ static void iree_hal_cuda_executable_layout_destroy(
   iree_hal_cuda_executable_layout_t* executable_layout =
       iree_hal_cuda_executable_layout_cast(base_executable_layout);
   iree_allocator_t host_allocator =
-      executable_layout->logical_device->host_allocator();
+      executable_layout->context->host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
 
   for (iree_host_size_t i = 0; i < executable_layout->set_layout_count; ++i) {

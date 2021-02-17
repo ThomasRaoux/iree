@@ -88,48 +88,13 @@ typedef uint32_t iree_hal_cuda_extensibility_set_t;
 // |out_string_values| may be passed as NULL.
 //
 // The returned strings originate from the _EXTENSION_NAME Cuda macros
-// (such as 'VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME') and have a
+// (such as 'VK_KHR_GET_device_PROPERTIES_2_EXTENSION_NAME') and have a
 // lifetime matching whatever module they are defined in.
 IREE_API_EXPORT iree_status_t IREE_API_CALL
 iree_hal_cuda_query_extensibility_set(
     iree_hal_cuda_features_t requested_features,
     iree_hal_cuda_extensibility_set_t set, iree_host_size_t string_capacity,
     const char** out_string_values, iree_host_size_t* out_string_count);
-
-//===----------------------------------------------------------------------===//
-// iree_hal_cuda_syms_t
-//===----------------------------------------------------------------------===//
-
-typedef struct iree_hal_cuda_syms_s iree_hal_cuda_syms_t;
-
-// Loads Cuda functions by invoking |vkGetInstanceProcAddr|.
-//
-// |vkGetInstanceProcAddr| can be obtained in whatever way suites the calling
-// application, such as via `dlsym` or `GetProcAddress` when dynamically
-// loading Cuda, or `reinterpret_cast<void*>(&vkGetInstanceProcAddr)` when
-// statically linking Cuda.
-//
-// |out_syms| must be released by the caller.
-IREE_API_EXPORT iree_status_t IREE_API_CALL iree_hal_cuda_syms_create(
-    void* vkGetInstanceProcAddr_fn, iree_allocator_t host_allocator,
-    iree_hal_cuda_syms_t** out_syms);
-
-// Loads Cuda functions from the Cuda loader.
-// This will look for a Cuda loader on the system (like libcuda.so) and
-// dlsym the functions from that.
-//
-// |out_syms| must be released by the caller with iree_hal_cuda_syms_release.
-IREE_API_EXPORT iree_status_t IREE_API_CALL
-iree_hal_cuda_syms_create_from_system_loader(
-    iree_allocator_t host_allocator, iree_hal_cuda_syms_t** out_syms);
-
-// Retains the given |syms| for the caller.
-IREE_API_EXPORT void IREE_API_CALL
-iree_hal_cuda_syms_retain(iree_hal_cuda_syms_t* syms);
-
-// Releases the given |syms| from the caller.
-IREE_API_EXPORT void IREE_API_CALL
-iree_hal_cuda_syms_release(iree_hal_cuda_syms_t* syms);
 
 //===----------------------------------------------------------------------===//
 // iree_hal_cuda_device_t
@@ -202,7 +167,7 @@ IREE_API_EXPORT void IREE_API_CALL iree_hal_cuda_driver_options_initialize(
 IREE_API_EXPORT iree_status_t IREE_API_CALL iree_hal_cuda_driver_create(
     iree_string_view_t identifier,
     const iree_hal_cuda_driver_options_t* options,
-    iree_hal_cuda_syms_t* syms, iree_allocator_t host_allocator,
+    iree_allocator_t host_allocator,
     iree_hal_driver_t** out_driver);
 
 
