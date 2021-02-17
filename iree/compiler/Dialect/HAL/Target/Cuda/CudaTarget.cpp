@@ -165,17 +165,16 @@ class CudaTargetBackend final : public TargetBackend {
                         [&](auto op) { return op.getName(); }));
     auto entryPointsRef = builder.createStringVec(entryPointNames);
 
-    // iree_CudaThreadgroupSize_vec_start(builder);
-    // for (auto &shader : mslShaders) {
-    //  iree_CudaThreadgroupSize_vec_push_create(
-    //      builder, 16, 1, 1);
-    // }
-    // auto threadgroupSizesRef = iree_CudaThreadgroupSize_vec_end(builder);
+    iree_block_size_vec_start(builder);
+    for (auto shader : entryPointNames) {
+      // Hard-coded workgroup size.
+      iree_block_size_vec_push_create(builder, 16, 1, 1);
+    }
+    auto blockSizesRef = iree_block_size_vec_end(builder);
 
     iree_CudaExecutableDef_start_as_root(builder);
     iree_CudaExecutableDef_entry_points_add(builder, entryPointsRef);
-    // iree_CudaExecutableDef_threadgroup_sizes_add(builder,
-    // threadgroupSizesRef);
+    iree_CudaExecutableDef_block_sizes_add(builder, blockSizesRef);
     iree_CudaExecutableDef_kernel_library_add(builder, ptxCudeRef);
     iree_CudaExecutableDef_end_as_root(builder);
 

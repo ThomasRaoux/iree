@@ -19,7 +19,7 @@ file_identifier "CUDA";
 file_extension "cuda";
 
 // A struct for the kernel block size along each dimensions.
-struct BlockSize {
+struct block_size {
   x:uint32;
   y:uint32;
   z:uint32;
@@ -34,10 +34,10 @@ table CudaExecutableDef {
   //
   // Currently the thread group size/block size is decided during code gen but
   // in Cuda it is set by the runtime.
-  block_sizes:[BlockSize];
+  block_sizes:[block_size];
 
   // Serialized ptx string.
-  kernel_library:[ubyte];
+  kernel_library:string;
 }
 
 root_type CudaExecutableDef;

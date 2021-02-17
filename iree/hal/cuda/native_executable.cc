@@ -23,13 +23,19 @@
 #include "iree/schemas/cuda_executable_def_reader.h"
 #include "iree/schemas/cuda_executable_def_verifier.h"
 
+typedef struct {
+  CUfunction cu_function;
+  uint32_t block_size_x;
+  uint32_t block_size_y;
+  uint32_t block_size_z;
+} iree_hal_cuda_native_executable_function_t;
 
 typedef struct {
   iree_hal_resource_t resource;
   iree_hal_cuda_context_wrapper_t* context;
   iree_host_size_t entry_count;
   CUmodule module;
-  CUfunction entry_functions[];
+  iree_hal_cuda_native_executable_function_t entry_functions[];
 } iree_hal_cuda_native_executable_t;
 
 extern const iree_hal_executable_vtable_t
@@ -58,14 +64,17 @@ iree_status_t iree_hal_cuda_native_executable_create(
       iree_CudaExecutableDef_as_root(executable_spec->executable_data.data);
 
   // Create the kernel module.
-  flatbuffers_uint8_vec_t kernel_code =
+  flatbuffers_string_t kernel_code =
       iree_CudaExecutableDef_kernel_library_get(executable_def);
   flatbuffers_string_vec_t entry_points_vec =
       iree_CudaExecutableDef_entry_points_get(executable_def);
+  iree_block_size_vec_t block_sizes_vec =
+      iree_CudaExecutableDef_block_sizes_get(executable_def);
   iree_host_size_t entry_count =
       flatbuffers_string_vec_len(entry_points_vec);
   iree_host_size_t total_size =
-      sizeof(*executable) + entry_count * sizeof(CUfunction);
+      sizeof(*executable) +
+      entry_count * sizeof(iree_hal_cuda_native_executable_function_t);
   iree_status_t status = iree_allocator_malloc(context->host_allocator,
                                                total_size, (void**)&executable);
   char log_buffer[1024 * 1024] = {};
@@ -92,7 +101,10 @@ iree_status_t iree_hal_cuda_native_executable_create(
         context->syms,
         cuModuleGetFunction(&function, module, entry_name),
         "cuModuleGetFunction");
-    executable->entry_functions[i] = function;
+    executable->entry_functions[i].cu_function = function;
+    executable->entry_functions[i].block_size_x = block_sizes_vec[i].x;
+    executable->entry_functions[i].block_size_y = block_sizes_vec[i].y;
+    executable->entry_functions[i].block_size_z = block_sizes_vec[i].z;
   }
 
   iree_hal_resource_initialize(&iree_hal_cuda_native_executable_vtable,
@@ -108,7 +120,18 @@ CUfunction iree_hal_cuda_native_executable_for_entry_point(
     iree_hal_executable_t* base_executable, int32_t entry_point) {
   iree_hal_cuda_native_executable_t* executable =
       iree_hal_cuda_native_executable_cast(base_executable);
-  return executable->entry_functions[entry_point];
+  return executable->entry_functions[entry_point].cu_function;
+}
+
+iree_status_t iree_hal_cuda_native_executable_block_size(
+    iree_hal_executable_t* base_executable, int32_t entry_point, uint32_t& x,
+    uint32_t& y, uint32_t& z) {
+  iree_hal_cuda_native_executable_t* executable =
+      iree_hal_cuda_native_executable_cast(base_executable);
+  x = executable->entry_functions[entry_point].block_size_x;
+  y = executable->entry_functions[entry_point].block_size_y;
+  z = executable->entry_functions[entry_point].block_size_z;
+  return iree_ok_status();
 }
 
 static void iree_hal_cuda_native_executable_destroy(

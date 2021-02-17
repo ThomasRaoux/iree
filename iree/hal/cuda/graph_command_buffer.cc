@@ -341,9 +341,9 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_dispatch(
   CUDA_KERNEL_NODE_PARAMS params = {};
   params.func =
       iree_hal_cuda_native_executable_for_entry_point(executable, entry_point);
-  params.blockDimX = 16;
-  params.blockDimY = 1; 
-  params.blockDimZ = 1;
+  IREE_RETURN_IF_ERROR(iree_hal_cuda_native_executable_block_size(executable, entry_point,
+                                             params.blockDimX, params.blockDimY,
+                                             params.blockDimZ));
   params.gridDimX = 1;
   params.gridDimY = 1;
   params.gridDimZ = 1;
