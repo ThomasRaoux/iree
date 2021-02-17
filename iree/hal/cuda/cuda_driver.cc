@@ -35,10 +35,7 @@ typedef struct {
   // same process.
   iree_string_view_t identifier;
 
-  iree_hal_cuda_device_options_t device_options;
   int default_device_index;
-
-  iree_hal_cuda_features_t enabled_features;
 
   // Cuda symbols.
   DynamicSymbols syms;
@@ -59,8 +56,6 @@ IREE_API_EXPORT void IREE_API_CALL iree_hal_cuda_driver_options_initialize(
     iree_hal_cuda_driver_options_t* out_options) {
   memset(out_options, 0, sizeof(*out_options));
   out_options->api_version = CUDA_VERSION;
-  out_options->requested_features = 0;
-  iree_hal_cuda_device_options_initialize(&out_options->device_options);
   out_options->default_device_index = 0;
 }
 
@@ -79,10 +74,7 @@ static iree_status_t iree_hal_cuda_driver_create_internal(
   iree_string_view_append_to_buffer(
       identifier, &driver->identifier,
       (char*)driver + total_size - identifier.size);
-  memcpy(&driver->device_options, &options->device_options,
-         sizeof(driver->device_options));
   driver->default_device_index = options->default_device_index;
-  driver->enabled_features = options->requested_features;
   auto status = driver->syms.LoadSymbols();
   /*if (!status.isOk()) {
     return iree_make_status(IREE_STATUS_ERROR, "Cannot load cuda symbols");
@@ -99,30 +91,6 @@ static void iree_hal_cuda_driver_destroy(iree_hal_driver_t* base_driver) {
   iree_allocator_free(host_allocator, driver);
 
   IREE_TRACE_ZONE_END(z0);
-}
-
-static iree_status_t iree_hal_cuda_driver_query_extensibility_set(
-    iree_hal_cuda_features_t requested_features,
-    iree_hal_cuda_extensibility_set_t set, iree::Arena* arena,
-    iree_hal_cuda_string_list_t* out_string_list) {
-  IREE_RETURN_IF_ERROR(iree_hal_cuda_query_extensibility_set(
-      requested_features, set, 0, NULL, &out_string_list->count));
-  out_string_list->values = (const char**)arena->AllocateBytes(
-      out_string_list->count * sizeof(out_string_list->values[0]));
-  IREE_RETURN_IF_ERROR(iree_hal_cuda_query_extensibility_set(
-      requested_features, set, out_string_list->count, out_string_list->values,
-      &out_string_list->count));
-  return iree_ok_status();
-}
-
-static iree_status_t iree_hal_cuda_driver_compute_enabled_extensibility_sets(
-    iree::hal::cuda::DynamicSymbols* syms,
-    iree_hal_cuda_features_t requested_features, iree::Arena* arena,
-    iree_hal_cuda_string_list_t* out_enabled_layers,
-    iree_hal_cuda_string_list_t* out_enabled_extensions) {
-
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "not implemented yet for CUDA");
 }
 
 IREE_API_EXPORT iree_status_t IREE_API_CALL iree_hal_cuda_driver_create(
@@ -236,11 +204,8 @@ static iree_status_t iree_hal_cuda_driver_create_device(
   iree_string_view_t device_name = iree_make_cstring_view("cuda");
 
   // Attempt to create the device.
-  // This may fail if the device was enumerated but is in exclusive use,
-  // disabled by the system, or permission is denied.
   iree_status_t status = iree_hal_cuda_device_create(
-      base_driver, device_name, driver->enabled_features,
-      &driver->device_options, &driver->syms,
+      base_driver, device_name, &driver->syms,
       device, host_allocator, out_device);
 
   IREE_TRACE_ZONE_END(z0);

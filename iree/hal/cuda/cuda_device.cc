@@ -36,20 +36,6 @@
 #include "iree/hal/cuda/graph_command_buffer.h"
 
 //===----------------------------------------------------------------------===//
-// iree_hal_cuda_device_t extensibility util
-//===----------------------------------------------------------------------===//
-
-IREE_API_EXPORT iree_status_t IREE_API_CALL
-iree_hal_cuda_query_extensibility_set(
-    iree_hal_cuda_features_t requested_features,
-    iree_hal_cuda_extensibility_set_t set, iree_host_size_t string_capacity,
-    const char** out_string_values, iree_host_size_t* out_string_count) {
-  *out_string_count = 0;
-  iree_status_t status = iree_ok_status();
-  return status;
-}
-
-//===----------------------------------------------------------------------===//
 // Queue selection
 //===----------------------------------------------------------------------===//
 
@@ -70,12 +56,9 @@ typedef struct {
   iree_hal_resource_t resource;
   iree_string_view_t identifier;
 
-  // Optional driver that owns the instance. We retain it for our lifetime to
-  // ensure the instance remains valid.
+  // Optional driver that owns the CUDA symbols. We retain it for our lifetime
+  // to ensure the symbols remains valid.
   iree_hal_driver_t* driver;
-
-  // Flags overriding default device behavior.
-  iree_hal_cuda_device_flags_t flags;
 
   CUdevice device;
 
@@ -92,12 +75,6 @@ static iree_hal_cuda_device_t* iree_hal_cuda_device_cast(
     iree_hal_device_t* base_value) {
   IREE_HAL_ASSERT_TYPE(base_value, &iree_hal_cuda_device_vtable);
   return (iree_hal_cuda_device_t*)base_value;
-}
-
-IREE_API_EXPORT void IREE_API_CALL iree_hal_cuda_device_options_initialize(
-    iree_hal_cuda_device_options_t* out_options) {
-  memset(out_options, 0, sizeof(*out_options));
-  out_options->flags = 0;
 }
 
 static void iree_hal_cuda_device_destroy(iree_hal_device_t* base_device) {
@@ -152,8 +129,6 @@ static iree_status_t iree_hal_cuda_device_create_internal(
 
 iree_status_t iree_hal_cuda_device_create(
     iree_hal_driver_t* driver, iree_string_view_t identifier,
-    iree_hal_cuda_features_t enabled_features,
-    const iree_hal_cuda_device_options_t* options,
     iree::hal::cuda::DynamicSymbols* syms,
     CUdevice device, iree_allocator_t host_allocator,
     iree_hal_device_t** out_device) {

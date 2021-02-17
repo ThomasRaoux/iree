@@ -31,8 +31,6 @@ extern "C" {
 // existing VkInstances provided by the application).
 iree_status_t iree_hal_cuda_device_create(
     iree_hal_driver_t* driver, iree_string_view_t identifier,
-    iree_hal_cuda_features_t enabled_features,
-    const iree_hal_cuda_device_options_t* options,
     iree::hal::cuda::DynamicSymbols* syms,
     CUdevice device, iree_allocator_t host_allocator,
     iree_hal_device_t** out_device);

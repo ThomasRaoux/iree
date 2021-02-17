@@ -17,116 +17,12 @@
 #ifndef IREE_HAL_CUDA_API_H_
 #define IREE_HAL_CUDA_API_H_
 
-// clang-format off: Must be included before all other headers:
-#include "iree/hal/cuda/cuda_headers.h"
-// clang-format on
-
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
-
-//===----------------------------------------------------------------------===//
-// iree_hal_cuda_device_t extensibility util
-//===----------------------------------------------------------------------===//
-
-// TODO(benvanik): replace with feature list (easier to version).
-// Bitfield that defines sets of Cuda features.
-enum iree_hal_cuda_feature_e {
-  // Use VK_LAYER_KHRONOS_standard_validation to validate Cuda API usage.
-  // Has a significant performance penalty and is *not* a security mechanism.
-  IREE_HAL_CUDA_FEATURE_ENABLE_VALIDATION_LAYERS = 1 << 0,
-
-  // Use VK_EXT_debug_utils, record markers, and log errors.
-  IREE_HAL_CUDA_FEATURE_ENABLE_DEBUG_UTILS = 1 << 1,
-};
-typedef uint64_t iree_hal_cuda_features_t;
-
-// Describes the type of a set of Cuda extensions.
-enum iree_hal_cuda_extensibility_set_e {
-  // A set of required instance layer names. These must all be enabled on
-  // the VkInstance for IREE to function.
-  IREE_HAL_CUDA_EXTENSIBILITY_INSTANCE_LAYERS_REQUIRED = 0,
-
-  // A set of optional instance layer names. If omitted fallbacks may be
-  // used or debugging features may not be available.
-  IREE_HAL_CUDA_EXTENSIBILITY_INSTANCE_LAYERS_OPTIONAL = 1,
-
-  // A set of required instance extension names. These must all be enabled on
-  // the VkInstance for IREE to function.
-  IREE_HAL_CUDA_EXTENSIBILITY_INSTANCE_EXTENSIONS_REQUIRED = 2,
-
-  // A set of optional instance extension names. If omitted fallbacks may be
-  // used or debugging features may not be available.
-  IREE_HAL_CUDA_EXTENSIBILITY_INSTANCE_EXTENSIONS_OPTIONAL = 3,
-
-  // A set of required device extension names. These must all be enabled on
-  // the CUdevice for IREE to function.
-  IREE_HAL_CUDA_EXTENSIBILITY_DEVICE_EXTENSIONS_REQUIRED = 4,
-
-  // A set of optional device extension names. If omitted fallbacks may be
-  // used or debugging features may not be available.
-  IREE_HAL_CUDA_EXTENSIBILITY_DEVICE_EXTENSIONS_OPTIONAL = 5,
-
-  IREE_HAL_CUDA_EXTENSIBILITY_SET_COUNT,
-};
-typedef uint32_t iree_hal_cuda_extensibility_set_t;
-
-// Queries the names of the Cuda layers and extensions used for a given set of
-// IREE |requested_features|. All devices used by IREE must have the required
-// layers and extensions as defined by these sets. Optional layers and
-// extensions will be used when needed and otherwise have fallbacks for when
-// they are not available.
-//
-// |string_capacity| defines the number of elements available in
-// |out_string_values| and |out_string_count| will be set with the actual number
-// of strings returned. If |string_capacity| is too small then
-// IREE_STATUS_OUT_OF_RANGE will be returned with the required capacity in
-// |out_string_count|. To only query the required capacity then
-// |out_string_values| may be passed as NULL.
-//
-// The returned strings originate from the _EXTENSION_NAME Cuda macros
-// (such as 'VK_KHR_GET_device_PROPERTIES_2_EXTENSION_NAME') and have a
-// lifetime matching whatever module they are defined in.
-IREE_API_EXPORT iree_status_t IREE_API_CALL
-iree_hal_cuda_query_extensibility_set(
-    iree_hal_cuda_features_t requested_features,
-    iree_hal_cuda_extensibility_set_t set, iree_host_size_t string_capacity,
-    const char** out_string_values, iree_host_size_t* out_string_count);
-
-//===----------------------------------------------------------------------===//
-// iree_hal_cuda_device_t
-//===----------------------------------------------------------------------===//
-
-// A set of queues within a specific queue family on a CUdevice.
-typedef struct {
-  // The index of a particular queue family on a CUdevice, as described
-  // by vkGetPhysicalDeviceQueueFamilyProperties.
-  uint32_t queue_family_index;
-
-  // Bitfield of queue indices within the queue family at |queue_family_index|.
-  uint64_t queue_indices;
-} iree_hal_cuda_queue_set_t;
-
-// TODO(benvanik): replace with flag list (easier to version).
-enum iree_hal_cuda_device_flag_e {
-  // Uses timeline semaphore emulation even if native support exists.
-  // May be removed in future versions when timeline semaphores can be assumed
-  // present on all platforms (looking at you, Android ಠ_ಠ).
-  IREE_HAL_CUDA_DEVICE_FORCE_TIMELINE_SEMAPHORE_EMULATION = 1 << 0,
-};
-typedef uint64_t iree_hal_cuda_device_flags_t;
-
-typedef struct {
-  // Flags controlling device behavior.
-  iree_hal_cuda_device_flags_t flags;
-} iree_hal_cuda_device_options_t;
-
-IREE_API_EXPORT void IREE_API_CALL iree_hal_cuda_device_options_initialize(
-    iree_hal_cuda_device_options_t* out_options);
-
 //===----------------------------------------------------------------------===//
 // iree_hal_cuda_driver_t
 //===----------------------------------------------------------------------===//
@@ -137,24 +33,8 @@ typedef struct {
   // Driver creation will fail if the required version is not available.
   uint32_t api_version;
 
-  // IREE features used to configure the VkInstance and CUdevices created using
-  // it. These are used to populate the active Cuda layers and extensions when
-  // the instance and its devices are created.
-  iree_hal_cuda_features_t requested_features;
-
-  // TODO(benvanik): remove this single setting - it would be nice instead to
-  // pass a list to force device enumeration/matrix expansion or omit entirely
-  // to have auto-discovered options based on capabilities. Right now this
-  // forces all devices - even if from different vendors - to have the same
-  // options.
-  // Options to use for all devices created by the driver.
-  iree_hal_cuda_device_options_t device_options;
-
-  // TODO(benvanik): change to something more canonically cuda (like
-  // CUdeviceProperties::deviceID).
   // Index of the default Cuda device to use within the list of available
-  // devices. Devices are discovered via vkEnumeratePhysicalDevices then
-  // considered "available" if compatible with the |requested_features|.
+  // devices.
   int default_device_index;
 } iree_hal_cuda_driver_options_t;
 
