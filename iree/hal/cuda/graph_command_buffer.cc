@@ -18,6 +18,7 @@
 #include "iree/hal/cuda/status_util.h"
 #include "iree/hal/cuda/cuda_buffer.h"
 #include "iree/hal/cuda/native_executable.h"
+#include "iree/hal/cuda/cuda_event.h"
 
 // Command buffer implementation that directly maps to cuda graph.
 // This records the commands on the calling thread without additional threading
@@ -155,13 +156,19 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_execution_barrier(
 static iree_status_t iree_hal_cuda_graph_command_buffer_signal_event(
     iree_hal_command_buffer_t* base_command_buffer, iree_hal_event_t* event,
     iree_hal_execution_stage_t source_stage_mask) {
-  /*iree_hal_cuda_graph_command_buffer_t* command_buffer =
+  iree_hal_cuda_graph_command_buffer_t* command_buffer =
       iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
+  // TODO: Enable back when switching to CUDA 11.1. In Cuda 11.0
+  // cuGraphAddEventRecordNode is not available.
+  /*CUgraphNode node;
   CUDA_RETURN_IF_ERROR(
       command_buffer->context->syms,
-      cuEventRecord(iree_hal_cuda_event_handle(event), command_buffer->stream),
-      "cuEventRecord");*/
-  return iree_ok_status();
+      cuGraphAddEventRecordNode(&node, command_buffer->graph, NULL, 0,
+                                iree_hal_cuda_event_handle(event)),
+      "cuGraphAddEventRecordNode");
+  return iree_ok_status();*/
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "need cuda implementation");
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_reset_event(
@@ -169,7 +176,8 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_reset_event(
     iree_hal_execution_stage_t source_stage_mask) {
   // TODO(thomasraoux): In Cuda events cannot be reset on the device side.
   // Need to look for solutions.
-  return iree_ok_status();
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "need cuda implementation");
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_wait_events(
@@ -181,8 +189,21 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_wait_events(
     const iree_hal_memory_barrier_t* memory_barriers,
     iree_host_size_t buffer_barrier_count,
     const iree_hal_buffer_barrier_t* buffer_barriers) {
+  // TODO: Enable back when switching to CUDA 11.1. In Cuda 11.0
+  // cuGraphAddEventWaitNode is not available.
+  /*iree_hal_cuda_graph_command_buffer_t* command_buffer =
+      iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
+  for (iree_host_size_t i = 0; i < event_count; i++) {
+    CUgraphNode node;
+    CUDA_RETURN_IF_ERROR(
+        command_buffer->context->syms,
+        cuGraphAddEventWaitNode(&node, command_buffer->graph, NULL, 0,
+                                iree_hal_cuda_event_handle(events[i])),
+        "cuGraphAddEventWaitNode");
+  }
+  return iree_ok_status();*/
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "need cuda implementation");
+                        "need cuda implementation");
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_discard_buffer(

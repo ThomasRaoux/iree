@@ -31,6 +31,7 @@ iree_cc_library(
     "cuda_device.cc"
     "cuda_driver.cc"
     "cuda_headers.h"
+    "cuda_event.cc"
     "descriptor_set_layout.cc"
     "event_semaphore.cc"
     "executable_layout.cc"

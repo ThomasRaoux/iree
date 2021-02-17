@@ -20,7 +20,11 @@ namespace iree {
 namespace hal {
 namespace cts {
 
-class SemaphoreSubmissionTest : public CtsTestBase {};
+class SemaphoreSubmissionTest : public CtsTestBase {
+public:
+  // Disable cuda backend for this test as semaphores are not implemented yet.
+  SemaphoreSubmissionTest() { driver_block_list.insert("cuda"); }
+};
 
 TEST_P(SemaphoreSubmissionTest, SubmitWithNoCommandBuffers) {
   // No waits, one signal which we immediately wait on after submit.

@@ -29,6 +29,9 @@
   CU_PFN_DECL(cuFuncSetCacheConfig)   
   CU_PFN_DECL(cuGetErrorName) 
   CU_PFN_DECL(cuGetErrorString)
+  // Requires CUDA 11.1:
+  //CU_PFN_DECL(cuGraphAddEventRecordNode)
+  //CU_PFN_DECL(cuGraphAddEventWaitNode)
   CU_PFN_DECL(cuGraphAddMemcpyNode)
   CU_PFN_DECL(cuGraphAddMemsetNode)
   CU_PFN_DECL(cuGraphAddKernelNode)
