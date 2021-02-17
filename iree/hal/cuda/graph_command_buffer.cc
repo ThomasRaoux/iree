@@ -29,7 +29,6 @@ typedef struct {
   iree_hal_command_category_t allowed_categories;
   CUgraph graph;
   CUgraphExec exec;
-
   void** current_descriptor;
 } iree_hal_cuda_graph_command_buffer_t;
 
@@ -52,7 +51,7 @@ iree_status_t iree_hal_cuda_graph_command_buffer_allocate(
   IREE_ASSERT_ARGUMENT(out_command_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  CUgraph graph;
+  CUgraph graph = NULL;
   CUDA_RETURN_IF_ERROR(context->syms, cuGraphCreate(&graph, /*flags=*/0),
                        "cuGraphCreate");
 
@@ -66,6 +65,7 @@ iree_status_t iree_hal_cuda_graph_command_buffer_allocate(
     command_buffer->mode = mode;
     command_buffer->allowed_categories = command_categories;
     command_buffer->graph = graph;
+    command_buffer->exec = NULL;
     command_buffer->current_descriptor = NULL;
     *out_command_buffer = (iree_hal_command_buffer_t*)command_buffer;
   } else {
@@ -82,8 +82,14 @@ static void iree_hal_cuda_graph_command_buffer_destroy(
       iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  CUDA_CHECK_OK(command_buffer->context->syms, cuGraphDestroy(command_buffer->graph));
-  //CUDA_CHECK_OK(command_buffer->context->syms, cuGraphExecDestroy(command_buffer->exec));
+  if (command_buffer->graph != NULL) {
+    CUDA_CHECK_OK(command_buffer->context->syms,
+                  cuGraphDestroy(command_buffer->graph));
+  }
+  if (command_buffer->exec != NULL) {
+    CUDA_CHECK_OK(command_buffer->context->syms,
+                  cuGraphExecDestroy(command_buffer->exec));
+  }
   iree_allocator_free(command_buffer->context->host_allocator, command_buffer);
 
   IREE_TRACE_ZONE_END(z0);
@@ -127,12 +133,9 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_end(
   auto result = command_buffer->context->syms->cuGraphInstantiate(
       &command_buffer->exec, command_buffer->graph, &error_node, log,
       sizeof(log));
-  // CUDA_RETURN_IF_ERROR(cuGraphDestroy(command_buffer->graph));
-
- // if (result != CUDA_SUCCESS) {
-//    return ::util::Annotate(CudaResultToStatus(result),
- //                           absl::string_view(buffer.data()));
-  //}
+  CUDA_RETURN_IF_ERROR(command_buffer->context->syms,
+                       cuGraphDestroy(command_buffer->graph), "cuGraphDestroy");
+  command_buffer->graph = NULL;
   return iree_ok_status();
 }
 
