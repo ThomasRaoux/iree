@@ -24,7 +24,6 @@ iree_cc_library(
   HDRS
     "api.h"
     "cuda_device.h"
-    "cuda_driver.h"
   SRCS
     "context_wrapper.h"
     "cuda_allocator.cc"

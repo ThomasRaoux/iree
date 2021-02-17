@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "iree/hal/cuda/cuda_driver.h"
-
 #include <memory>
 
 #include "iree/base/memory.h"

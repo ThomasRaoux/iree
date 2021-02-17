@@ -18,6 +18,7 @@
 #include "iree/hal/api.h"
 #include "iree/hal/cuda/cuda_headers.h"
 #include "iree/hal/cuda/dynamic_symbols.h"
+
 // Structure to wrap all objects constant within a context. This makes it
 // simpler to pass it to the different objects and saves memory.
 typedef struct {
