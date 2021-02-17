@@ -28,9 +28,6 @@ iree_status_t iree_hal_cuda_event_create(
     iree_hal_cuda_context_wrapper_t* context_wrapper,
     iree_hal_event_t** out_event);
 
-// Returns cuda event.
-CUevent iree_hal_cuda_event_handle(const iree_hal_event_t* event);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

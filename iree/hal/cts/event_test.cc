@@ -21,11 +21,7 @@ namespace iree {
 namespace hal {
 namespace cts {
 
-class EventTest : public CtsTestBase {
-public:
-  // Disable cuda backend for this test as events are not implemented yet.
-  EventTest() { driver_block_list.insert("cuda"); }
-};
+class EventTest : public CtsTestBase {};
 
 TEST_P(EventTest, Create) {
   iree_hal_event_t* event;

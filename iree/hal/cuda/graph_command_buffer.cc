@@ -30,6 +30,7 @@ typedef struct {
   iree_hal_command_category_t allowed_categories;
   CUgraph graph;
   CUgraphExec exec;
+  CUgraphNode lastNode;
   void** current_descriptor;
 } iree_hal_cuda_graph_command_buffer_t;
 
@@ -67,6 +68,7 @@ iree_status_t iree_hal_cuda_graph_command_buffer_allocate(
     command_buffer->graph = graph;
     command_buffer->exec = NULL;
     command_buffer->current_descriptor = NULL;
+    command_buffer->lastNode = NULL;
     *out_command_buffer = (iree_hal_command_buffer_t*)command_buffer;
   } else {
     context->syms->cuGraphDestroy(graph);
@@ -147,10 +149,9 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_execution_barrier(
     const iree_hal_memory_barrier_t* memory_barriers,
     iree_host_size_t buffer_barrier_count,
     const iree_hal_buffer_barrier_t* buffer_barriers) {
-  // TODO
+  // TODO: Implement barrier with Graph edges. Right now all the nodes are
+  // serialized.
   return iree_ok_status();
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "need cuda implementation");
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_signal_event(
@@ -158,26 +159,17 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_signal_event(
     iree_hal_execution_stage_t source_stage_mask) {
   iree_hal_cuda_graph_command_buffer_t* command_buffer =
       iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
-  // TODO: Enable back when switching to CUDA 11.1. In Cuda 11.0
-  // cuGraphAddEventRecordNode is not available.
-  /*CUgraphNode node;
-  CUDA_RETURN_IF_ERROR(
-      command_buffer->context->syms,
-      cuGraphAddEventRecordNode(&node, command_buffer->graph, NULL, 0,
-                                iree_hal_cuda_event_handle(event)),
-      "cuGraphAddEventRecordNode");
-  return iree_ok_status();*/
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "need cuda implementation");
+  // TODO: Implement barrier with Graph edges. Right now all the nodes are
+  // serialized.
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_reset_event(
     iree_hal_command_buffer_t* base_command_buffer, iree_hal_event_t* event,
     iree_hal_execution_stage_t source_stage_mask) {
-  // TODO(thomasraoux): In Cuda events cannot be reset on the device side.
-  // Need to look for solutions.
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "need cuda implementation");
+  // TODO: Implement barrier with Graph edges. Right now all the nodes are
+  // serialized.
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_wait_events(
@@ -189,21 +181,9 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_wait_events(
     const iree_hal_memory_barrier_t* memory_barriers,
     iree_host_size_t buffer_barrier_count,
     const iree_hal_buffer_barrier_t* buffer_barriers) {
-  // TODO: Enable back when switching to CUDA 11.1. In Cuda 11.0
-  // cuGraphAddEventWaitNode is not available.
-  /*iree_hal_cuda_graph_command_buffer_t* command_buffer =
-      iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
-  for (iree_host_size_t i = 0; i < event_count; i++) {
-    CUgraphNode node;
-    CUDA_RETURN_IF_ERROR(
-        command_buffer->context->syms,
-        cuGraphAddEventWaitNode(&node, command_buffer->graph, NULL, 0,
-                                iree_hal_cuda_event_handle(events[i])),
-        "cuGraphAddEventWaitNode");
-  }
-  return iree_ok_status();*/
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                        "need cuda implementation");
+  // TODO: Implement barrier with Graph edges. Right now all the nodes are
+  // serialized.
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_discard_buffer(
@@ -245,16 +225,19 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_fill_buffer(
       iree_hal_buffer_allocated_buffer(target_buffer));
   target_offset += iree_hal_buffer_byte_offset(target_buffer);
   uint32_t dword_pattern = splat_pattern(pattern, pattern_length);
-  CUgraphNode node;
   CUDA_MEMSET_NODE_PARAMS params = {};
   params.dst = target_device_buffer + target_offset;
   params.elementSize = pattern_length;
   params.width = length;
   params.height = 1;
   params.value = dword_pattern;
+  // Serialize all the nodes for now.
+  CUgraphNode dep[] = {command_buffer->lastNode};
+  size_t numNode = command_buffer->lastNode ? 1 : 0;
   CUDA_RETURN_IF_ERROR(
       command_buffer->context->syms,
-      cuGraphAddMemsetNode(&node, command_buffer->graph, nullptr, 0, &params,
+      cuGraphAddMemsetNode(&command_buffer->lastNode, command_buffer->graph,
+                           dep, numNode, &params,
                            command_buffer->context->cu_context),
       "cuGraphAddMemsetNode");
   return iree_ok_status();
@@ -282,7 +265,6 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_copy_buffer(
   CUdeviceptr source_device_buffer = iree_hal_cuda_buffer_device_pointer(
       iree_hal_buffer_allocated_buffer(source_buffer));
   source_offset += iree_hal_buffer_byte_offset(source_buffer);
-  CUgraphNode node;
   CUDA_MEMCPY3D params = {};
   params.Depth = 1;
   params.Height = 1;
@@ -293,9 +275,14 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_copy_buffer(
   params.dstXInBytes = target_offset;
   params.srcMemoryType = CU_MEMORYTYPE_DEVICE;
   params.dstMemoryType = CU_MEMORYTYPE_DEVICE;
+  // Serialize all the nodes for now.
+  CUgraphNode dep[] = { command_buffer->lastNode };
+  size_t numNode = command_buffer->lastNode ? 1 : 0;
   CUDA_RETURN_IF_ERROR(
       command_buffer->context->syms,
-      cuGraphAddMemcpyNode(&node, command_buffer->graph, nullptr, 0, &params,
+      cuGraphAddMemcpyNode(&command_buffer->lastNode, command_buffer->graph,
+                           dep,
+                           numNode, &params,
                            command_buffer->context->cu_context),
       "cuGraphAddMemcpyNode");
   return iree_ok_status();
@@ -361,18 +348,15 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_dispatch(
   params.gridDimY = 1;
   params.gridDimZ = 1;
   params.kernelParams = command_buffer->current_descriptor;
-
-  CUgraphNode node;
-  CUDA_RETURN_IF_ERROR(syms,
-                       cuGraphAddKernelNode(&node, command_buffer->graph,
-                                            nullptr, 0, &params),
-                       "cuGraphAddKernelNode");
-
-  CUgraphNode error_node;
-  char log[1024];
-  auto result = syms->cuGraphInstantiate(
-      &command_buffer->exec, command_buffer->graph, &error_node, log,
-      sizeof(log));                
+  // Serialize all the nodes for now.
+  CUgraphNode dep[] = { command_buffer->lastNode };
+  size_t numNodes = command_buffer->lastNode ? 1 : 0;
+  CUDA_RETURN_IF_ERROR(
+      syms,
+      cuGraphAddKernelNode(&command_buffer->lastNode, command_buffer->graph,
+                           dep,
+                           numNodes, &params),
+      "cuGraphAddKernelNode");
   return iree_ok_status();
 }
 

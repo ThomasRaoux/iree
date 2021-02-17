@@ -16,10 +16,10 @@
 #include "iree/base/tracing.h"
 #include "iree/hal/cuda/status_util.h"
 
+// Dummy events for now, don't do anything.
 typedef struct {
   iree_hal_resource_t resource;
   iree_hal_cuda_context_wrapper_t* context_wrapper;
-  CUevent cu_event;
 } iree_hal_cuda_event_t;
 
 extern const iree_hal_event_vtable_t iree_hal_cuda_event_vtable;
@@ -30,12 +30,6 @@ static iree_hal_cuda_event_t* iree_hal_cuda_event_cast(
   return (iree_hal_cuda_event_t*)base_value;
 }
 
-static void iree_hal_cuda_destroy_event(
-    iree_hal_cuda_context_wrapper_t* context_wrapper, CUevent event) {
-  if (event == NULL) return;
-  context_wrapper->syms->cuEventDestroy(event);
-}
-
 iree_status_t iree_hal_cuda_event_create(
     iree_hal_cuda_context_wrapper_t* context_wrapper, iree_hal_event_t** out_event) {
   IREE_ASSERT_ARGUMENT(context_wrapper);
@@ -43,21 +37,15 @@ iree_status_t iree_hal_cuda_event_create(
   *out_event = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  CUevent cu_event = NULL;
   int flags = CU_EVENT_DEFAULT;
   iree_hal_cuda_event_t* event = NULL;
-  CUDA_RETURN_IF_ERROR(context_wrapper->syms, cuEventCreate(&cu_event, flags),
-                       "cuEventCreate");
   iree_status_t status = iree_allocator_malloc(context_wrapper->host_allocator,
                                                sizeof(*event), (void**)&event);
   if (iree_status_is_ok(status)) {
     iree_hal_resource_initialize(&iree_hal_cuda_event_vtable,
                                  &event->resource);
     event->context_wrapper = context_wrapper;
-    event->cu_event = cu_event;
     *out_event = (iree_hal_event_t*)event;
-  } else {
-    iree_hal_cuda_destroy_event(context_wrapper, cu_event);
   }
 
   IREE_TRACE_ZONE_END(z0);
@@ -70,15 +58,9 @@ static void iree_hal_cuda_event_destroy(iree_hal_event_t* base_event) {
   iree_allocator_t host_allocator = event->context_wrapper->host_allocator;
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  iree_hal_cuda_destroy_event(event->context_wrapper, event->cu_event);
   iree_allocator_free(host_allocator, event);
 
   IREE_TRACE_ZONE_END(z0);
-}
-
-CUevent iree_hal_cuda_event_handle(
-    const iree_hal_event_t* base_event) {
-  return ((const iree_hal_cuda_event_t*)base_event)->cu_event;
 }
 
 const iree_hal_event_vtable_t iree_hal_cuda_event_vtable = {
