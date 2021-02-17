@@ -54,7 +54,6 @@ iree_status_t iree_hal_cuda_graph_command_buffer_allocate(
   CUgraph graph = NULL;
   CUDA_RETURN_IF_ERROR(context->syms, cuGraphCreate(&graph, /*flags=*/0),
                        "cuGraphCreate");
-
   iree_hal_cuda_graph_command_buffer_t* command_buffer = NULL;
   iree_status_t status = iree_allocator_malloc(
       context->host_allocator, sizeof(*command_buffer), (void**)&command_buffer);
@@ -156,15 +155,21 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_execution_barrier(
 static iree_status_t iree_hal_cuda_graph_command_buffer_signal_event(
     iree_hal_command_buffer_t* base_command_buffer, iree_hal_event_t* event,
     iree_hal_execution_stage_t source_stage_mask) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "need cuda implementation");
+  /*iree_hal_cuda_graph_command_buffer_t* command_buffer =
+      iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
+  CUDA_RETURN_IF_ERROR(
+      command_buffer->context->syms,
+      cuEventRecord(iree_hal_cuda_event_handle(event), command_buffer->stream),
+      "cuEventRecord");*/
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_reset_event(
     iree_hal_command_buffer_t* base_command_buffer, iree_hal_event_t* event,
     iree_hal_execution_stage_t source_stage_mask) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "need cuda implementation");
+  // TODO(thomasraoux): In Cuda events cannot be reset on the device side.
+  // Need to look for solutions.
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_wait_events(
@@ -346,18 +351,7 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_dispatch(
   char log[1024];
   auto result = syms->cuGraphInstantiate(
       &command_buffer->exec, command_buffer->graph, &error_node, log,
-      sizeof(log));
-
-  CUstream stream;
-  CUDA_RETURN_IF_ERROR(syms,
-                       cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING),
-                       "cuStreamCreate");
-  CUDA_RETURN_IF_ERROR(syms,
-                           cuGraphLaunch(command_buffer->exec, stream),
-                           "cuGraphLaunch");   
-  CUDA_RETURN_IF_ERROR(syms,
-                       cuStreamSynchronize(stream),
-                       "cuStreamSynchronize");                    
+      sizeof(log));                
   return iree_ok_status();
 }
 
