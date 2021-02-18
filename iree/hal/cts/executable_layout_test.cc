@@ -21,11 +21,7 @@ namespace iree {
 namespace hal {
 namespace cts {
 
-class ExecutableLayoutTest : public CtsTestBase {
-public:
-  // Not implemented yet on CUDA.
-  ExecutableLayoutTest() { driver_block_list.insert("cuda"); }
-};
+class ExecutableLayoutTest : public CtsTestBase {};
 
 TEST_P(ExecutableLayoutTest, CreateWithNoLayouts) {
   iree_hal_executable_layout_t* executable_layout;

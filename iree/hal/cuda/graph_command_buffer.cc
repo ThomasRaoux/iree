@@ -17,6 +17,7 @@
 #include "iree/base/tracing.h"
 #include "iree/hal/cuda/cuda_buffer.h"
 #include "iree/hal/cuda/cuda_event.h"
+#include "iree/hal/cuda/native_executable.h"
 #include "iree/hal/cuda/status_util.h"
 
 // Command buffer implementation that directly maps to cuda graph.
@@ -332,8 +333,29 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_dispatch(
     iree_hal_command_buffer_t* base_command_buffer,
     iree_hal_executable_t* executable, int32_t entry_point,
     uint32_t workgroup_x, uint32_t workgroup_y, uint32_t workgroup_z) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "need cuda implementation");
+  iree_hal_cuda_graph_command_buffer_t* command_buffer =
+      iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
+  iree::hal::cuda::DynamicSymbols* syms = command_buffer->context->syms;
+
+  CUDA_KERNEL_NODE_PARAMS params = {};
+  params.func =
+      iree_hal_cuda_native_executable_for_entry_point(executable, entry_point);
+  IREE_RETURN_IF_ERROR(iree_hal_cuda_native_executable_block_size(
+      executable, entry_point, params.blockDimX, params.blockDimY,
+      params.blockDimZ));
+  params.gridDimX = 1;
+  params.gridDimY = 1;
+  params.gridDimZ = 1;
+  params.kernelParams = command_buffer->current_descriptor;
+  // Serialize all the nodes for now.
+  CUgraphNode dep[] = {command_buffer->lastNode};
+  size_t numNodes = command_buffer->lastNode ? 1 : 0;
+  CUDA_RETURN_IF_ERROR(
+      syms,
+      cuGraphAddKernelNode(&command_buffer->lastNode, command_buffer->graph,
+                           dep, numNodes, &params),
+      "cuGraphAddKernelNode");
+  return iree_ok_status();
 }
 
 static iree_status_t iree_hal_cuda_graph_command_buffer_dispatch_indirect(
