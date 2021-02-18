@@ -22,7 +22,7 @@ namespace hal {
 namespace cts {
 
 class ExecutableLayoutTest : public CtsTestBase {
- public:
+public:
   // Not implemented yet on CUDA.
   ExecutableLayoutTest() { driver_block_list.insert("cuda"); }
 };

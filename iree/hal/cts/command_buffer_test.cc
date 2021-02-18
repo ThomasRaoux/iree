@@ -33,10 +33,6 @@ namespace cts {
 using ::testing::ContainerEq;
 
 class CommandBufferTest : public CtsTestBase {
- public:
-  // Not implemented yet on CUDA.
-  CommandBufferTest() { driver_block_list.insert("cuda"); }
-
  protected:
   static constexpr iree_device_size_t kBufferSize = 4096;
 };

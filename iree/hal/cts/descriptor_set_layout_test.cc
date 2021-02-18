@@ -21,11 +21,7 @@ namespace iree {
 namespace hal {
 namespace cts {
 
-class DescriptorSetLayoutTest : public CtsTestBase {
- public:
-  // Not implemented yet on CUDA.
-  DescriptorSetLayoutTest() { driver_block_list.insert("cuda"); }
-};
+class DescriptorSetLayoutTest : public CtsTestBase {};
 
 // Note: bindingCount == 0 is valid in VkDescriptorSetLayoutCreateInfo:
 // https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkDescriptorSetLayoutCreateInfo.html
