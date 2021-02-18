@@ -33,6 +33,12 @@ class CtsTestBase : public ::testing::TestWithParam<std::string> {
  protected:
   virtual void SetUp() {
     const std::string& driver_name = GetParam();
+    if (driver_block_list.find(driver_name) != driver_block_list.end()) {
+      IREE_LOG(WARNING)
+          << "Skipping test as driver is explicitly disabled for this test";
+      GTEST_SKIP();
+      return;
+    }
 
     // Get driver with the given name and create its default device.
     // Skip drivers that are (gracefully) unavailable, fail if creation fails.
@@ -122,6 +128,8 @@ class CtsTestBase : public ::testing::TestWithParam<std::string> {
   iree_hal_driver_t* driver_ = nullptr;
   iree_hal_device_t* device_ = nullptr;
   iree_hal_allocator_t* device_allocator_ = nullptr;
+
+  std::set<std::string> driver_block_list;
 
  private:
   // Gets a HAL driver with the provided name, if available.

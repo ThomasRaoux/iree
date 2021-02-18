@@ -20,6 +20,52 @@ iree_add_all_subdirs()
 
 iree_cc_library(
   NAME
+    cuda
+  HDRS
+    "api.h"
+  SRCS
+    "api.h"
+    "context_wrapper.h"
+    "cuda_allocator.cc"
+    "cuda_allocator.h"
+    "cuda_buffer.cc"
+    "cuda_buffer.h"
+    "cuda_device.cc"
+    "cuda_device.h"
+    "cuda_driver.cc"
+    "cuda_event.cc"
+    "cuda_event.h"
+    "descriptor_set_layout.cc"
+    "descriptor_set_layout.h"
+    "event_semaphore.cc"
+    "event_semaphore.h"
+    "executable_layout.cc"
+    "executable_layout.h"
+    "graph_command_buffer.cc"
+    "graph_command_buffer.h"
+    "native_executable.cc"
+    "native_executable.h"
+    "nop_executable_cache.cc"
+    "nop_executable_cache.h"
+    "status_util.cc"
+    "status_util.h"
+  DEPS
+    ::dynamic_symbols
+    iree::base::api
+    iree::base::core_headers
+    iree::base::flatcc
+    iree::base::internal
+    iree::base::logging
+    iree::base::status
+    iree::base::synchronization
+    iree::base::tracing
+    iree::hal::api
+    iree::schemas::cuda_executable_def_c_fbs
+  PUBLIC
+)
+
+iree_cc_library(
+  NAME
     dynamic_symbols
   HDRS
     "dynamic_symbols.h"
