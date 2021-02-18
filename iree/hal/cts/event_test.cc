@@ -21,7 +21,11 @@ namespace iree {
 namespace hal {
 namespace cts {
 
-class EventTest : public CtsTestBase {};
+class EventTest : public CtsTestBase {
+ public:
+  // Not implemented yet on CUDA.
+  EventTest() { driver_block_list.insert("cuda"); }
+};
 
 TEST_P(EventTest, Create) {
   iree_hal_event_t* event;

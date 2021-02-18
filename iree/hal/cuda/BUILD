@@ -29,6 +29,40 @@ endif()
 )
 
 cc_library(
+    name = "cuda",
+    srcs = [
+        "api.h",
+        "context_wrapper.h",
+        "cuda_allocator.cc",
+        "cuda_allocator.h",
+        "cuda_buffer.cc",
+        "cuda_buffer.h",
+        "cuda_device.cc",
+        "cuda_device.h",
+        "cuda_driver.cc",
+        "status_util.cc",
+        "status_util.h",
+    ],
+    hdrs = [
+        "api.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":dynamic_symbols",
+        "//iree/base:api",
+        "//iree/base:core_headers",
+        "//iree/base:flatcc",
+        "//iree/base:logging",
+        "//iree/base:status",
+        "//iree/base:synchronization",
+        "//iree/base:tracing",
+        "//iree/base/internal",
+        "//iree/hal:api",
+        "//iree/schemas:cuda_executable_def_c_fbs",
+    ],
+)
+
+cc_library(
     name = "dynamic_symbols",
     srcs = [
         "cuda_headers.h",
@@ -44,7 +78,7 @@ cc_library(
         "//iree/base:status",
         "//iree/base:tracing",
         "@com_google_absl//absl/types:span",
-        "@cuda_headers",
+        "@cuda_headers//:cuda_headers",
     ],
 )
 
