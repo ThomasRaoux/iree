@@ -747,6 +747,11 @@ iree_status_t iree_hal_vulkan_device_create(
         host_allocator, out_device);
   }
 
+  // Get timestamp period for this physical device.
+  VkPhysicalDeviceProperties deviceProperties = {};
+  logical_device->syms()->vkGetPhysicalDeviceProperties(physical_device,
+                                                        &deviceProperties);
+  logical_device->timestampPeriod = deviceProperties.limits.timestampPeriod;
   logical_device->ReleaseReference();
   return status;
 }

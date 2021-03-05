@@ -27,6 +27,13 @@
 
 using namespace iree::hal::vulkan;
 
+
+static const int numQueries = 5000;
+
+struct shader {
+  iree_hal_executable_t* executable;
+  int index;
+};
 // Command buffer implementation that directly maps to VkCommandBuffer.
 // This records the commands on the calling thread without additional threading
 // indirection.
@@ -40,7 +47,9 @@ typedef struct {
   VkCommandBuffer handle;
 
   DynamicSymbols* syms;
-
+  VkQueryPool queryPool;
+  int poolIndex;
+  shader kernel[numQueries/2];
   // TODO(benvanik): may grow large - should try to reclaim or reuse.
   DescriptorSetArena descriptor_set_arena;
 
@@ -59,6 +68,23 @@ iree_hal_vulkan_direct_command_buffer_cast(
   IREE_HAL_ASSERT_TYPE(base_value,
                        &iree_hal_vulkan_direct_command_buffer_vtable);
   return (iree_hal_vulkan_direct_command_buffer_t*)base_value;
+}
+
+static void createQueryPool(
+    iree_hal_vulkan_direct_command_buffer_t* command_buffer) {
+  VkDevice device = command_buffer->logical_device->value();
+
+  // Create query pool.
+  VkQueryPoolCreateInfo queryPoolCreateInfo = {};
+  queryPoolCreateInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+  queryPoolCreateInfo.pNext = nullptr;
+  queryPoolCreateInfo.flags = 0;
+  queryPoolCreateInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+  queryPoolCreateInfo.queryCount = numQueries;
+  queryPoolCreateInfo.pipelineStatistics = 0;
+  command_buffer->syms->vkCreateQueryPool(device, &queryPoolCreateInfo,
+                                          /*pAllocator=*/nullptr,
+                                          &command_buffer->queryPool);
 }
 
 iree_status_t iree_hal_vulkan_direct_command_buffer_allocate(
@@ -103,6 +129,8 @@ iree_status_t iree_hal_vulkan_direct_command_buffer_allocate(
         DescriptorSetArena(descriptor_pool_cache);
     new (&command_buffer->descriptor_set_group) DescriptorSetGroup();
 
+    createQueryPool(command_buffer);
+
     *out_command_buffer = (iree_hal_command_buffer_t*)command_buffer;
   } else {
     command_pool->Free(handle);
@@ -114,6 +142,8 @@ iree_status_t iree_hal_vulkan_direct_command_buffer_allocate(
 
 static void iree_hal_vulkan_direct_command_buffer_reset(
     iree_hal_vulkan_direct_command_buffer_t* command_buffer) {
+  //command_buffer->syms->vkCmdResetQueryPool(
+     // command_buffer->handle, command_buffer->queryPool, 0, numQueries);
   // NOTE: we require that command buffers not be recorded while they are
   // in-flight so this is safe.
   IREE_IGNORE_ERROR(command_buffer->descriptor_set_group.Reset());
@@ -128,6 +158,8 @@ static void iree_hal_vulkan_direct_command_buffer_destroy(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   iree_hal_vulkan_direct_command_buffer_reset(command_buffer);
+  command_buffer->syms->vkDestroyQueryPool(
+      command_buffer->logical_device->value(), command_buffer->queryPool, nullptr);
   command_buffer->command_pool->Free(command_buffer->handle);
 
   command_buffer->descriptor_set_group.~DescriptorSetGroup();
@@ -330,7 +362,7 @@ static iree_status_t iree_hal_vulkan_direct_command_buffer_reset_event(
   command_buffer->syms->vkCmdResetEvent(
       command_buffer->handle, iree_hal_vulkan_native_event_handle(event),
       iree_hal_vulkan_convert_pipeline_stage_flags(source_stage_mask));
-
+  command_buffer->poolIndex = 0;
   return iree_ok_status();
 }
 
@@ -569,10 +601,20 @@ static iree_status_t iree_hal_vulkan_direct_command_buffer_dispatch(
           executable, entry_point, &pipeline_handle));
   command_buffer->syms->vkCmdBindPipeline(
       command_buffer->handle, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_handle);
-
+  if (command_buffer->poolIndex < numQueries) {
+    command_buffer->syms->vkCmdWriteTimestamp(
+        command_buffer->handle, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        command_buffer->queryPool, command_buffer->poolIndex++);
+    command_buffer->kernel[command_buffer->poolIndex/2].executable = executable;
+    command_buffer->kernel[command_buffer->poolIndex/2].index = entry_point;
+  }
   command_buffer->syms->vkCmdDispatch(command_buffer->handle, workgroup_x,
                                       workgroup_y, workgroup_z);
-
+  if (command_buffer->poolIndex < numQueries) {
+    command_buffer->syms->vkCmdWriteTimestamp(
+        command_buffer->handle, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        command_buffer->queryPool, command_buffer->poolIndex++);
+  }
   return iree_ok_status();
 }
 
@@ -600,6 +642,36 @@ static iree_status_t iree_hal_vulkan_direct_command_buffer_dispatch_indirect(
       command_buffer->handle, workgroups_device_buffer, workgroups_offset);
 
   return iree_ok_status();
+}
+
+void iree_hal_vulkan_dump_queries(
+    iree_hal_command_buffer_t* base_command_buffer) {
+  iree_hal_vulkan_direct_command_buffer_t* command_buffer =
+      iree_hal_vulkan_direct_command_buffer_cast(base_command_buffer);
+  VkDevice device = command_buffer->logical_device->value();
+  uint64_t timestamps[numQueries];
+  command_buffer->syms->vkGetQueryPoolResults(
+      device, command_buffer->queryPool, /*firstQuery=*/0,
+      /*queryCount=*/command_buffer->poolIndex,
+      /*dataSize=*/sizeof(timestamps),
+      /*pData=*/reinterpret_cast<void*>(timestamps),
+      /*stride=*/sizeof(uint64_t),
+      VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+  printf("timing in us:\n");
+  for (int i = 0; i < command_buffer->poolIndex; i += 2) {
+    float microsec = (timestamps[i + 1] - timestamps[i]) *
+                     command_buffer->logical_device->timestampPeriod / 1000;
+    printf("%f\n", microsec);
+  }
+  printf("Shaders:\n");
+  for (int i = 0; i < command_buffer->poolIndex; i += 2) {
+    const char* name = iree_hal_vulkan_native_executable_pipeline_get_name(
+        command_buffer->kernel[i / 2].executable,
+        command_buffer->kernel[i / 2].index);
+    printf("%s\n", name);
+  }
+  command_buffer->syms->vkCmdResetQueryPool(
+      command_buffer->handle, command_buffer->queryPool, 0, numQueries);
 }
 
 const iree_hal_command_buffer_vtable_t

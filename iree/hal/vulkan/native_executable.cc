@@ -49,13 +49,22 @@ static void iree_hal_vulkan_destroy_shader_module(
                                                 logical_device->allocator());
 }
 
+typedef struct {
+  iree_hal_resource_t resource;
+  VkDeviceHandle* logical_device;
+  iree_host_size_t pipeline_count;
+  std::string names[5];
+  VkPipeline pipelines[];
+} iree_hal_vulkan_native_executable_t;
+
 static iree_status_t iree_hal_vulkan_create_pipelines(
     VkDeviceHandle* logical_device, VkPipelineCache pipeline_cache,
     iree_hal_executable_caching_mode_t caching_mode,
     iree_SpirVExecutableDef_table_t executable_def,
     VkShaderModule shader_module, iree_host_size_t executable_layout_count,
     iree_hal_executable_layout_t* const* executable_layouts,
-    iree_host_size_t pipeline_count, VkPipeline* out_pipelines) {
+    iree_host_size_t pipeline_count, VkPipeline* out_pipelines, 
+    iree_hal_vulkan_native_executable_t* executable) {
   VkComputePipelineCreateInfo* create_infos = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(
       logical_device->host_allocator(),
@@ -93,6 +102,7 @@ static iree_status_t iree_hal_vulkan_create_pipelines(
     stage_create_info->module = shader_module;
     stage_create_info->pName =
         flatbuffers_string_vec_at(entry_points_vec, entry_ordinal);
+    executable->names[entry_ordinal] = stage_create_info->pName;
     stage_create_info->pSpecializationInfo = NULL;
   }
 
@@ -176,13 +186,6 @@ static iree_status_t iree_hal_spirv_executable_flatbuffer_verify(
   return iree_ok_status();
 }
 
-typedef struct {
-  iree_hal_resource_t resource;
-  VkDeviceHandle* logical_device;
-  iree_host_size_t pipeline_count;
-  VkPipeline pipelines[];
-} iree_hal_vulkan_native_executable_t;
-
 extern const iree_hal_executable_vtable_t
     iree_hal_vulkan_native_executable_vtable;
 
@@ -247,7 +250,7 @@ iree_status_t iree_hal_vulkan_native_executable_create(
         logical_device, pipeline_cache, executable_spec->caching_mode,
         executable_def, shader_module, executable_spec->executable_layout_count,
         executable_spec->executable_layouts, executable->pipeline_count,
-        executable->pipelines);
+        executable->pipelines, executable);
   }
   iree_hal_vulkan_destroy_shader_module(logical_device, shader_module);
 
@@ -289,6 +292,13 @@ iree_status_t iree_hal_vulkan_native_executable_pipeline_for_entry_point(
   }
   *out_pipeline_handle = executable->pipelines[entry_ordinal];
   return iree_ok_status();
+}
+
+const char* iree_hal_vulkan_native_executable_pipeline_get_name(
+    iree_hal_executable_t* base_executable, iree_host_size_t entry_ordinal) {
+  iree_hal_vulkan_native_executable_t* executable =
+      iree_hal_vulkan_native_executable_cast(base_executable);
+      return executable->names[entry_ordinal].c_str();
 }
 
 const iree_hal_executable_vtable_t iree_hal_vulkan_native_executable_vtable = {

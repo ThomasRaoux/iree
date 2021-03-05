@@ -120,6 +120,12 @@ iree_status_t DirectCommandQueue::Submit(
                             submit_infos.data(), VK_NULL_HANDLE),
       "vkQueueSubmit");
   iree_slim_mutex_unlock(&queue_mutex_);
+
+  for (iree_host_size_t i = 0; i < batch_count; ++i) {
+    for (iree_host_size_t j = 0; j < batches[i].command_buffer_count; ++j) {
+      iree_hal_vulkan_dump_queries(batches[i].command_buffers[j]);
+    }
+  }
   IREE_RETURN_IF_ERROR(status);
 
   return iree_ok_status();

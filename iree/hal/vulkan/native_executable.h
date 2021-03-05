@@ -40,6 +40,8 @@ iree_status_t iree_hal_vulkan_native_executable_pipeline_for_entry_point(
     iree_hal_executable_t* executable, iree_host_size_t entry_ordinal,
     VkPipeline* out_pipeline_handle);
 
+const char* iree_hal_vulkan_native_executable_pipeline_get_name(
+    iree_hal_executable_t* executable, iree_host_size_t entry_ordinal);
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

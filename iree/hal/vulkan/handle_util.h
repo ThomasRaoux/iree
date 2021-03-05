@@ -41,6 +41,7 @@ namespace vulkan {
 
 class VkDeviceHandle : public RefObject<VkDeviceHandle> {
  public:
+  
   VkDeviceHandle(DynamicSymbols* syms,
                  iree_hal_vulkan_device_extensions_t enabled_extensions,
                  bool owns_device, iree_allocator_t host_allocator,
@@ -51,6 +52,7 @@ class VkDeviceHandle : public RefObject<VkDeviceHandle> {
         allocator_(allocator),
         host_allocator_(host_allocator) {}
   ~VkDeviceHandle() { reset(); }
+  float timestampPeriod = 0.f;
 
   VkDeviceHandle(const VkDeviceHandle&) = delete;
   VkDeviceHandle& operator=(const VkDeviceHandle&) = delete;

@@ -36,6 +36,8 @@ iree_status_t iree_hal_vulkan_direct_command_buffer_allocate(
 VkCommandBuffer iree_hal_vulkan_direct_command_buffer_handle(
     iree_hal_command_buffer_t* command_buffer);
 
+void iree_hal_vulkan_dump_queries(iree_hal_command_buffer_t* command_buffer);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
