@@ -29,12 +29,12 @@
 
 namespace mlir {
 namespace iree_compiler {
-
 static constexpr int32_t kNumGPUDims = 3;
 static constexpr unsigned kWorkgroupMemoryAddressSpace = 3;
 
 static SmallVector<linalg::ProcInfo, 2> getGPUThreadIdsAndCounts(
-    OpBuilder &builder, Location loc, unsigned numDims) {
+    OpBuilder &builder, Location loc, unsigned numDims,
+    ArrayRef<int64_t> workgroupSize) {
   assert(numDims <= kNumGPUDims);
   SmallVector<linalg::ProcInfo, 2> procInfo(numDims);
   std::array<StringRef, kNumGPUDims> dimAttr{"x", "y", "z"};
@@ -43,11 +43,11 @@ static SmallVector<linalg::ProcInfo, 2> getGPUThreadIdsAndCounts(
     StringAttr attr = builder.getStringAttr(dimAttr[i]);
     procInfo[numDims - 1 - i] = {
         builder.create<gpu::ThreadIdOp>(loc, indexType, attr),
-        builder.create<gpu::BlockDimOp>(loc, indexType, attr)};
+        builder.create<ConstantOp>(loc,
+                                   builder.getIndexAttr(workgroupSize[i]))};
   }
   return procInfo;
 }
-
 
 /// Patterns for thread level tiling.
 static void populateTilingReductionPatterns(
@@ -69,7 +69,7 @@ static void populateTilingReductionPatterns(
 /// Patterns for thread level tiling.
 static void populateTilingToInvocationPatterns(
     MLIRContext *context, OwningRewritePatternList &patterns,
-    ArrayRef<int64_t> tileSizes) {
+    ArrayRef<int64_t> tileSizes, ArrayRef<int64_t> workgroupSize) {
   linalg::TileSizeComputationFunction getInnerTileSizeFn =
       [tileSizes](OpBuilder &builder, Operation *operation) {
         if (tileSizes.empty()) return SmallVector<Value, 4>();
@@ -86,9 +86,11 @@ static void populateTilingToInvocationPatterns(
         return tileSizesVal;
       };
 
-  auto getThreadProcInfoFn = [](OpBuilder &builder, Location loc,
-                                ArrayRef<Range> parallelLoopRanges) {
-    return getGPUThreadIdsAndCounts(builder, loc, parallelLoopRanges.size());
+  auto getThreadProcInfoFn = [workgroupSize](
+                                 OpBuilder &builder, Location loc,
+                                 ArrayRef<Range> parallelLoopRanges) {
+    return getGPUThreadIdsAndCounts(builder, loc, parallelLoopRanges.size(),
+                                    workgroupSize);
   };
   linalg::LinalgLoopDistributionOptions invocationDistributionOptions = {
       getThreadProcInfoFn,
@@ -97,7 +99,7 @@ static void populateTilingToInvocationPatterns(
 
   auto tilingOptions =
       linalg::LinalgTilingOptions()
-          .setLoopType(linalg::LinalgTilingLoopType::ParallelLoops)
+          .setLoopType(linalg::LinalgTilingLoopType::Loops)
           .setTileSizeComputationFunction(getInnerTileSizeFn)
           .setDistributionOptions(invocationDistributionOptions);
 
@@ -280,18 +282,14 @@ struct TileAndDistributeToThreads
       SmallVector<int64_t, 4> threadTileSize =
           llvm::to_vector<4>(config->getTileSizes(rootOp, 2));
       if(numContractionLoops > 0) {
-          // If we are tiling contraction loops at the WG level apply tiling as
-          // the flow level only tiles parallel dimensions.
-          SmallVector<int64_t, 4> reductionTileSizes = llvm::to_vector<4>(
-              config->getTileSizes(rootOp, 0).take_back(numContractionLoops));
-          reductionTileSizes.append(numOuterParallelLoops, 0);
-          std::reverse(reductionTileSizes.begin(), reductionTileSizes.end());
-          OwningRewritePatternList wgTilingPatterns(context);
-          populateTilingReductionPatterns(context, wgTilingPatterns,
-                                             reductionTileSizes);
-          (void)applyPatternsAndFoldGreedily(
-              funcOp, std::move(wgTilingPatterns));
-          applyCanonicalizationPatternsForTiling(context, funcOp);
+        // Tile again at the workgroup level since redution dimension were
+        // ignored. Dimensions already tiled will be ignore since we tile to the
+        // same size.
+        OwningRewritePatternList wgTilingPatterns(context);
+        populateTilingReductionPatterns(context, wgTilingPatterns,
+                                        config->getTileSizes(rootOp, 0));
+        (void)applyPatternsAndFoldGreedily(funcOp, std::move(wgTilingPatterns));
+        applyCanonicalizationPatternsForTiling(context, funcOp);
       }
 
       {
@@ -306,11 +304,12 @@ struct TileAndDistributeToThreads
         // Apply last level of tiling and distribute to threads.
         OwningRewritePatternList threadLevelTilingPatterns(context);
         populateTilingToInvocationPatterns(context, threadLevelTilingPatterns,
-                                           threadTileSize);
+                                           threadTileSize,
+                                           config->getWorkgroupSize());
         (void)applyPatternsAndFoldGreedily(
             funcOp, std::move(threadLevelTilingPatterns));
         applyCanonicalizationPatternsForTiling(context, funcOp);
-        }
+      }
       {
         OwningRewritePatternList patterns(context);
         // Apply canonicalization patterns.

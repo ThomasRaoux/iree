@@ -55,7 +55,7 @@ static LaunchConfig getOpLaunchConfig(linalg::MatmulOp op) {
   config.setTileSizes(op, ts, 0);  // Workgroup level.
   config.setTileSizes(op, {}, 1);  // Subgroup level.
   SmallVector<int64_t, 4> invocationLevelTs = {ts[0] / workgroupSize[1],
-                                               ts[1] / workgroupSize[0], ts[2]};
+                                               ts[1] / workgroupSize[0] };
   config.setTileSizes(op, invocationLevelTs, 2);  // Thread level.
   return config;
 }
