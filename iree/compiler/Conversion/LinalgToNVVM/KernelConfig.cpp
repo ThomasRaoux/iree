@@ -34,7 +34,7 @@ static LaunchConfig getOpLaunchConfig(linalg::GenericOp op) {
   // TODO(thomasraoux): Currently the original shape information is lost during
   // tiling at the flow level. We need way to access it to be able to make a
   // better choice of tile size.
-  int64_t lowerTs = 4 * cudaWarpSize;
+  int64_t lowerTs = 2 * cudaWarpSize;
   SmallVector<int64_t, 4> ts;
   ts.resize(numLoops, 1);
   ts.back() = lowerTs;
