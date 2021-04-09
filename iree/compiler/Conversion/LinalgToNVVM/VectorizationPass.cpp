@@ -17,7 +17,6 @@
 #include "iree/compiler/Conversion/CodegenUtils/TransformUtils.h"
 #include "iree/compiler/Conversion/Common/Transforms.h"
 #include "iree/compiler/Conversion/LinalgToNVVM/Passes.h"
-#include "mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h"
 #include "mlir/Dialect/Linalg/Transforms/Hoisting.h"
 #include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/Dialect/Vector/VectorTransforms.h"
@@ -116,18 +115,13 @@ struct VectorizationPass
       (void)applyPatternsAndFoldGreedily(funcOp,
                                          std::move(canonicalizationPatterns2));
 
+      // Step 3. Hoist transfer_read/transfer_write for read-modify-write
+      // patterns.
       linalg::hoistRedundantVectorTransfers(funcOp);
-    }
-    {
-      // Step 3. Canonicalize the transfer ops generated.
-      RewritePatternSet vectorToLoopsPatterns(context);
-      VectorTransferToSCFOptions vectorToSCFOptions;
-      vectorToSCFOptions.setUnroll(true);
-      populateVectorToSCFConversionPatterns(vectorToLoopsPatterns,
-                                            vectorToSCFOptions);
-      populateStdLegalizationPatternsForSPIRVLowering(vectorToLoopsPatterns);
-      (void)applyPatternsAndFoldGreedily(funcOp,
-                                         std::move(vectorToLoopsPatterns));
+
+      // Step 4. Apply transfer_read store->load forwarding and dead store
+      // optimizations.
+      vector::transferOpflowOpt(funcOp);
     }
   }
 };

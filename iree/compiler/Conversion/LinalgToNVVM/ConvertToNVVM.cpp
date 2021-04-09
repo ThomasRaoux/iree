@@ -13,8 +13,10 @@
 // limitations under the License.
 
 #include "iree/compiler/Conversion/CodegenUtils/FunctionUtils.h"
+#include "iree/compiler/Conversion/CodegenUtils/TransformUtils.h"
 #include "iree/compiler/Conversion/LinalgToNVVM/Passes.h"
 #include "iree/compiler/Dialect/IREE/IR/IREEOps.h"
+#include "mlir/Conversion/StandardToSPIRV/StandardToSPIRV.h"
 #include "mlir/Conversion/GPUToNVVM/GPUToNVVMPass.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
@@ -184,6 +186,17 @@ struct ConvertToNVVMPass
     // which need to be lowered further, which is not supported by a single
     // conversion pass.
     // Run Vector -> Vector transformations ahead of conversion to LLVM.
+    {
+      // Canonicalize the transfer ops generated.
+      RewritePatternSet vectorToLoopsPatterns(&getContext());
+      VectorTransferToSCFOptions vectorToSCFOptions;
+      vectorToSCFOptions.setUnroll(true);
+      populateVectorToSCFConversionPatterns(vectorToLoopsPatterns,
+                                            vectorToSCFOptions);
+      populateStdLegalizationPatternsForSPIRVLowering(vectorToLoopsPatterns);
+      (void)applyPatternsAndFoldGreedily(m,
+                                         std::move(vectorToLoopsPatterns));
+    }
     {
       OwningRewritePatternList patterns(&getContext());
       vector::populateVectorToVectorCanonicalizationPatterns(patterns);
