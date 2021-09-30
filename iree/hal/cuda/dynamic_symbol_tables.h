@@ -17,6 +17,15 @@ CU_PFN_DECL(cuGraphAddMemsetNode, CUgraphNode*, CUgraph, const CUgraphNode*,
             size_t, const CUDA_MEMSET_NODE_PARAMS*, CUcontext)
 CU_PFN_DECL(cuGraphAddKernelNode, CUgraphNode*, CUgraph, const CUgraphNode*,
             size_t, const CUDA_KERNEL_NODE_PARAMS*)
+
+CU_PFN_DECL(cuGraphAddEventRecordNode, CUgraphNode*, CUgraph, const CUgraphNode*,
+            size_t, CUevent)
+CU_PFN_DECL(cuGraphAddEventWaitNode, CUgraphNode*, CUgraph, const CUgraphNode*,
+            size_t, CUevent)
+CU_PFN_DECL(cuEventCreate, CUevent*, unsigned int)
+CU_PFN_DECL(cuEventDestroy, CUevent)
+CU_PFN_DECL(cuEventElapsedTime, float*, CUevent, CUevent)
+
 CU_PFN_DECL(cuGraphCreate, CUgraph*, unsigned int)
 CU_PFN_DECL(cuGraphDestroy, CUgraph)
 CU_PFN_DECL(cuGraphExecDestroy, CUgraphExec)

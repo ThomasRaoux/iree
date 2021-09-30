@@ -29,6 +29,8 @@ iree_status_t iree_hal_cuda_graph_command_buffer_create(
 CUgraphExec iree_hal_cuda_graph_command_buffer_exec(
     const iree_hal_command_buffer_t* command_buffer);
 
+void print_diff(iree_hal_command_buffer_t* command_buffer);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

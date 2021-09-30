@@ -29,7 +29,10 @@ typedef struct iree_hal_cuda_graph_command_buffer_t {
   iree_hal_queue_affinity_t queue_affinity;
   CUgraph graph;
   CUgraphExec exec;
-  // Keep track of the last node added to the command buffer as we are currently
+  CUevent event_start;
+  CUevent event_end;
+
+// Keep track of the last node added to the command buffer as we are currently
   // serializing all the nodes (each node depends on the previous one).
   CUgraphNode last_node;
   // Keep track of the current set of kernel arguments.
@@ -79,6 +82,15 @@ iree_status_t iree_hal_cuda_graph_command_buffer_create(
     command_buffer->exec = NULL;
     command_buffer->last_node = NULL;
 
+    CUDA_RETURN_IF_ERROR(
+        command_buffer->context->syms,
+        cuEventCreate(&command_buffer->event_start, CU_EVENT_DEFAULT),
+        "cuEventCreate");
+    CUDA_RETURN_IF_ERROR(
+        command_buffer->context->syms,
+        cuEventCreate(&command_buffer->event_end, CU_EVENT_DEFAULT),
+        "cuEventCreate");
+
     CUdeviceptr* device_ptrs =
         (CUdeviceptr*)(command_buffer->current_descriptor +
                        IREE_HAL_CUDA_MAX_KERNEL_ARG);
@@ -101,6 +113,8 @@ static void iree_hal_cuda_graph_command_buffer_destroy(
       iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
   IREE_TRACE_ZONE_BEGIN(z0);
 
+  command_buffer->context->syms->cuEventDestroy(command_buffer->event_start);
+  command_buffer->context->syms->cuEventDestroy(command_buffer->event_end);
   if (command_buffer->graph != NULL) {
     CUDA_IGNORE_ERROR(command_buffer->context->syms,
                       cuGraphDestroy(command_buffer->graph));
@@ -119,6 +133,15 @@ CUgraphExec iree_hal_cuda_graph_command_buffer_handle(
   iree_hal_cuda_graph_command_buffer_t* command_buffer =
       iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
   return command_buffer->exec;
+}
+
+void print_diff(iree_hal_command_buffer_t* base_command_buffer) {
+  iree_hal_cuda_graph_command_buffer_t* command_buffer =
+      iree_hal_cuda_graph_command_buffer_cast(base_command_buffer);
+  float t = 0.f;
+  command_buffer->context->syms->cuEventElapsedTime(
+      &t, command_buffer->event_start, command_buffer->event_end);
+  printf("\n --- time : %f\n\n", t);
 }
 
 static iree_hal_command_buffer_mode_t iree_hal_cuda_graph_command_buffer_mode(
@@ -429,11 +452,25 @@ static iree_status_t iree_hal_cuda_graph_command_buffer_dispatch(
   // Serialize all the nodes for now.
   CUgraphNode dep[] = {command_buffer->last_node};
   size_t numNodes = command_buffer->last_node ? 1 : 0;
+
+  CUDA_RETURN_IF_ERROR(command_buffer->context->syms,
+                       cuGraphAddEventRecordNode(
+                           &command_buffer->last_node, command_buffer->graph,
+                           dep, numNodes, command_buffer->event_start),
+                       "cuGraphAddEventRecordNode");
+  numNodes = 1;
+
   CUDA_RETURN_IF_ERROR(
       command_buffer->context->syms,
       cuGraphAddKernelNode(&command_buffer->last_node, command_buffer->graph,
                            dep, numNodes, &params),
       "cuGraphAddKernelNode");
+
+  CUDA_RETURN_IF_ERROR(
+      command_buffer->context->syms,
+      cuGraphAddEventWaitNode(&command_buffer->last_node, command_buffer->graph,
+                              dep, numNodes, command_buffer->event_end),
+      "cuGraphAddEventWaitNode");
   return iree_ok_status();
 }
 
