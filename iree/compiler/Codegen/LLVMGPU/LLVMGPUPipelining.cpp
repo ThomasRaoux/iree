@@ -47,15 +47,17 @@ static void getPipelineStages(
   }
   // Create a modulo schedule with loads from global memory and the operations
   // it depends on in stage 0. Store to shared memory and computation are in
-  // stage 1. In order to have a correct scheduling even with back edges we
-  // order stages in decreasing order.
+  // stage 1.
+  // Schedule stage 0 first to prevent llvm optimizations from undoing the
+  // pipelining.
+  for (Operation& op : forOp.getBody()->getOperations()) {
+    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
+  }
   for (Operation& op : forOp.getBody()->getOperations()) {
     if (!loadDep.count(&op) && !isa<scf::YieldOp>(op))
       ops.push_back(std::make_pair(&op, 1));
   }
-  for (Operation& op : forOp.getBody()->getOperations()) {
-    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
-  }
+
 }
 
 namespace {
