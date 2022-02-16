@@ -21,6 +21,7 @@ iree_lit_test_suite(
     "gpu_set_num_workgroups.mlir"
     "illegal_configuration.mlir"
     "legalize.mlir"
+    "multibuffer.mlir"
     "nvvm_pipeline_test.mlir"
     "rocdl_pipeline_test.mlir"
     "tensorcore_vectorization.mlir"
