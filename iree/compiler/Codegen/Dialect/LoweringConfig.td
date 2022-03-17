@@ -103,11 +103,14 @@ def IREECodegen_TranslationInfoAttr :
     AttrParameter<"IREE::Codegen::DispatchLoweringPassPipelineAttr",
         "Name of the pipeline to be invoked on the translation unit.">:$passPipeline,
     DefaultValuedParameter<"ArrayAttr", "ArrayAttr::get($_ctx, {})",
-        "The workload mapped to a single workgroup">:$workloadPerWorkgroup
+        "The workload mapped to a single workgroup">:$workloadPerWorkgroup,
+    DefaultValuedParameter<"Optional<unsigned>", "llvm::None",
+        "The software pipeline depth to be used">:$softwarePipelineDepth
   );
   let builders = [
     AttrBuilder<(ins "DispatchLoweringPassPipeline":$passPipeline,
-        CArg<"ArrayRef<int64_t>", "{}">:$workloadPerWorkgroup)>
+        CArg<"ArrayRef<int64_t>", "{}">:$workloadPerWorkgroup,
+        CArg<"Optional<unsigned>", "llvm::None">:$softwarePipelineDepth)>
   ];
   let extraClassDeclaration = [{
     // Returns the lowering pass pipeline set.
