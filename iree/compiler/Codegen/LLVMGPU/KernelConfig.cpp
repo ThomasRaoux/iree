@@ -71,9 +71,9 @@ static std::string getTargetArch(FuncOp entryPoint) {
 static bool supportsTensorCore(FuncOp entryPoint, linalg::LinalgOp op) {
   // Limit tensor core pipeline to matmul as not all combinations of transpose
   // are supported upstream.
-  // TODO(thomasraoux): Enable batchMatmul and generic contraction.
   if (getTargetArch(entryPoint) != "sm_80" ||
-      !(isa<linalg::MatmulOp>(op) || isa<linalg::BatchMatmulOp>(op))) {
+      !(isa<linalg::MatmulOp>(op) || isa<linalg::BatchMatmulOp>(op) ||
+        isa<linalg::GenericOp>(op))) {
     return false;
   }
   // Check that we support converting any fused operation. When using the
