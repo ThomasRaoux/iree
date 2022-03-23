@@ -160,7 +160,7 @@ static LogicalResult setContractConfig(FuncOp entryPoint, linalg::LinalgOp op) {
                       sizeK != ShapedType::kDynamicSize;
   if (isStaticSize) {
     /// Try tensorcore config first.
-    if (supportsTensorCore(entryPoint, op)) {
+    if (1) {
       SmallVector<TileWorkgroupSizePair> TCtileSizeConfig;
       getTensorCoreConfig(TCtileSizeConfig);
       // Pick the best configuration where the original shape is aligned on the

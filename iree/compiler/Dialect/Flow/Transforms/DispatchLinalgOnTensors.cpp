@@ -992,8 +992,54 @@ LogicalResult createDispatchRegionsFromRootOps(mlir::Operation *funcOp) {
   return success();
 }
 
+struct GenericOpInterchangePattern
+    : public OpRewritePattern<linalg::GenericOp> {
+  using OpRewritePattern<linalg::GenericOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(linalg::GenericOp genericOp,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<unsigned> interchange;
+    bool needInterchange = false;
+    unsigned numParallelLoop = genericOp.getNumParallelLoops();
+    if (numParallelLoop == 0) return failure();
+    for (auto iter : llvm::enumerate(genericOp.iterator_types())) {
+      if (isParallelIterator(iter.value())) {
+        interchange.push_back(iter.index());
+        if (iter.index() >= numParallelLoop) needInterchange = true;
+      }
+    }
+    // If all the parallel loops are outter loops skip the pattern.
+    if (!needInterchange) return failure();
+    for (auto iter : llvm::enumerate(genericOp.iterator_types())) {
+      if (isReductionIterator(iter.value())) {
+        interchange.push_back(iter.index());
+      }
+    }
+    return interchangeGenericOp(rewriter, genericOp, interchange);
+  }
+};
+
 void DispatchLinalgOnTensorsPass::runOnOperation() {
   auto funcOp = llvm::cast<FunctionOpInterface>(getOperation());
+
+  {
+    RewritePatternSet patterns(funcOp.getContext());
+    linalg::populateSplitReductionPattern(
+        patterns,
+        [](linalg::LinalgOp op) {
+          unsigned insertDimIndex = 0;
+          int64_t ratio = 0;
+          if (!isa<linalg::MatmulOp>(op))
+            return std::make_pair(ratio, insertDimIndex);
+          ratio = 8;
+          return std::make_pair(ratio, insertDimIndex);
+        },
+        linalg::LinalgTransformationFilter(
+            ArrayRef<StringAttr>{},
+            StringAttr::get(funcOp.getContext(), "SPLIT")));
+    patterns.add<GenericOpInterchangePattern>(&getContext());
+    (void)applyPatternsAndFoldGreedily(funcOp, std::move(patterns));
+  }
+
   MLIRContext *context = funcOp->getContext();
   unsigned numRoots = decideFusableLinalgOps(funcOp);
 
