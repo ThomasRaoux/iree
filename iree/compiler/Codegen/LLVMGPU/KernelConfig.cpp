@@ -52,7 +52,7 @@ static void getTensorCoreConfig(
     SmallVectorImpl<TileWorkgroupSizePair> &tileSizes) {
   // Tile sizes are skewed towards small matmul for now. Long term the plan is
   // to not rely on hardcoded configurations.
-  tileSizes.push_back(TileWorkgroupSizePair({{32, 32, 16}, {64, 2, 1}}));
+  tileSizes.push_back(TileWorkgroupSizePair({{64, 64, 16}, {64, 2, 1}}));
 }
 
 static std::string getTargetArch(FuncOp entryPoint) {
@@ -293,7 +293,7 @@ static LogicalResult setRootDefaultConfig(FuncOp entryPoint, Operation *op) {
   size_t numLoops = partitionedLoops.back() + 1;
   // To get peak occupancy we need a workgroup size of at least two warps
   std::array<int64_t, 3> workgroupSize = {2 * cudaWarpSize, 1, 1};
-  unsigned vectorSize = 4;
+  unsigned vectorSize = 1;
   SmallVector<int64_t, 4> workgroupTileSizes(numLoops, 1);
   // Set all non-parallel loops to zero tile size.
   llvm::DenseSet<unsigned> partitionedLoopsSet(partitionedLoops.begin(),
