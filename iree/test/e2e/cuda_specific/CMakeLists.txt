@@ -27,3 +27,23 @@ iree_check_single_backend_test_suite(
     "noubsan"
     "requires-gpu-nvidia"
 )
+
+iree_check_single_backend_test_suite(
+  NAME
+    check_cuda_split_k
+  SRCS
+    "dot.mlir"
+  TARGET_BACKEND
+    "cuda"
+  DRIVER
+    "cuda"
+  COMPILER_FLAGS
+    "-iree-input-type=mhlo"
+    "-iree-flow-split-matmul-reduction=8"
+  LABELS
+    "noasan"
+    "nomsan"
+    "notsan"
+    "noubsan"
+    "requires-gpu-nvidia"
+)
