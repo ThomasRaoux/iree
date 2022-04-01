@@ -70,7 +70,7 @@ hal.executable private @dot_dispatch_1  {
 }
 
 //  CHECK-DAG: #[[CONFIG:.+]] = #iree_codegen.lowering_config<tile_sizes = {{\[}}[4, 2, 4]{{\]}}>
-//  CHECK-DAG: #[[TRANSLATION:.+]] = #iree_codegen.translation_info<LLVMGPUMatmulSimt>
+//  CHECK-DAG: #[[TRANSLATION:.+]] = #iree_codegen.translation_info<LLVMGPUMatmulSimt pipeline_depth = 1>
 //      CHECK: hal.executable.entry_point public @dot_dispatch_1
 // CHECK-SAME:     translation_info = #[[TRANSLATION]]
 // CHECK-SAME:     workgroup_size = [2 : index, 4 : index, 1 : index]

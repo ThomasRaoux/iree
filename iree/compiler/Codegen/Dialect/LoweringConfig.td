@@ -96,7 +96,8 @@ def IREECodegen_TranslationInfoAttr :
   }];
 
   let assemblyFormat = [{
-    `<` `` $passPipeline (`,` `workload_per_wg` `=` $workloadPerWorkgroup^)? `>`
+    `<` `` $passPipeline (`,` `workload_per_wg` `=` $workloadPerWorkgroup^)?
+    (`pipeline_depth` `=` $softwarePipelineDepth^)? `>`
   }];
 
   let parameters = (ins
@@ -104,13 +105,13 @@ def IREECodegen_TranslationInfoAttr :
         "Name of the pipeline to be invoked on the translation unit.">:$passPipeline,
     DefaultValuedParameter<"ArrayAttr", "ArrayAttr::get($_ctx, {})",
         "The workload mapped to a single workgroup">:$workloadPerWorkgroup,
-    DefaultValuedParameter<"Optional<unsigned>", "llvm::None",
+    DefaultValuedParameter<"unsigned", "0",
         "The software pipeline depth to be used">:$softwarePipelineDepth
   );
   let builders = [
     AttrBuilder<(ins "DispatchLoweringPassPipeline":$passPipeline,
         CArg<"ArrayRef<int64_t>", "{}">:$workloadPerWorkgroup,
-        CArg<"Optional<unsigned>", "llvm::None">:$softwarePipelineDepth)>
+        CArg<"unsigned", "0">:$softwarePipelineDepth)>
   ];
   let extraClassDeclaration = [{
     // Returns the lowering pass pipeline set.

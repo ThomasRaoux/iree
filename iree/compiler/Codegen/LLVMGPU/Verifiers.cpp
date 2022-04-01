@@ -13,7 +13,11 @@ namespace mlir {
 namespace iree_compiler {
 
 constexpr unsigned kWorkgroupTileLevel = 0;
-constexpr int kSharedMemSizeBytes = 64 * 1024;
+/// Pick the biggest case to not be limited by the verifier. If running on a
+/// smaller machine the model may still report an error.
+/// Currently A100 allows address up tp 163K per threadblock:
+/// https://docs.nvidia.com/cuda/ampere-tuning-guide/index.html#sm-occupancy
+constexpr int kSharedMemSizeBytes = 163 * 1024;
 
 LogicalResult verifyGPUMatmulSimtPassPipeline(
     Operation *op, IREE::Codegen::LoweringConfigAttr loweringConfig,
@@ -57,6 +61,7 @@ LogicalResult verifyGPUMatmulSimtPassPipeline(
                            firstLevelTileSizes[3]};
   }
 
+
   // Verify the total workgroup size is <= 1024
   int64_t totalWorkgroupSize =
       workgroupSize[0] * workgroupSize[1] * workgroupSize[2];
@@ -86,6 +91,12 @@ LogicalResult verifyGPUMatmulSimtPassPipeline(
     return op->emitOpError("expected shared memory usage <= 64Kb for ")
            << pipelineName << ", got " << totalSharedMemSizeBytes;
   }
+
+  // This pipeline doesn't use multi-buffering so we can pipeline at max with a
+  // depth of 1.
+  unsigned pipelineDepth = translationInfo.getSoftwarePipelineDepth();
+  if (pipelineDepth > 1)
+    return op->emitError("expected pipeline depth maximum of 1");
 
   return success();
 }
@@ -194,6 +205,13 @@ LogicalResult verifyGPUMatmulTensorCorePipeline(
            << "]";
   }
 
+  // This pipeline doesn't use multi-buffering so we can pipeline at max with a
+  // depth of 1.
+  unsigned pipelineDepth = translationInfo.getSoftwarePipelineDepth();
+  if (pipelineDepth >= lhsShape[1] / firstLevelTileSizes[2])
+    return op->emitError(
+        "expected pipeline to be smaller than K dimensions divided by tileK");
+
   // Verify shared memory usage of operands after tiling requires <= 64Kb
   // combined space.
   unsigned bytesSize =
@@ -204,8 +222,11 @@ LogicalResult verifyGPUMatmulTensorCorePipeline(
       (firstLevelTileSizes[0] * firstLevelTileSizes[2] +
        firstLevelTileSizes[1] * firstLevelTileSizes[2]) *
       bytesSize;
-
-  if (totalSharedMemSizeBytes > kSharedMemSizeBytes) {
+  // When pipelining with a depth greater than 1 we need to multibuffer the
+  // shared memory. Therefore we need to consider it when calculating the amount
+  // of shared memory used.
+  unsigned numberOfBuffers = std::max<unsigned>(1, pipelineDepth);
+  if (totalSharedMemSizeBytes * numberOfBuffers > kSharedMemSizeBytes) {
     return op->emitOpError("expected shared memory usage <= 64Kb for ")
            << pipelineName << ", got " << totalSharedMemSizeBytes;
   }
