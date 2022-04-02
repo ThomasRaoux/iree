@@ -14,11 +14,13 @@
 #include "iree/compiler/Codegen/Transforms/Transforms.h"
 #include "iree/compiler/Codegen/Utils/MarkerUtils.h"
 #include "iree/compiler/Dialect/Util/IR/UtilOps.h"
+#include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/GPUToNVVM/GPUToNVVMPass.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/Passes.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Support/MathExtras.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -220,7 +222,7 @@ static void populatePromotionPatterns(MLIRContext *context,
           .setAllocationDeallocationFns(allocateWorkgroupMemory,
                                         deallocateWorkgroupMemory)
           .setCopyInOutFns(copyToWorkgroupMemory, copyToWorkgroupMemory)
-          .setOperandsToPromote({0, 1})
+          .setOperandsToPromote({0, 1, 2})
           .setUseFullTileBuffers({false, false}),
       linalg::LinalgTransformationFilter(
           {StringAttr::get(context, getWorkgroupKTiledMarker())},
@@ -232,6 +234,84 @@ static void populatePromotionPatterns(MLIRContext *context,
                            linalgOp.getNumParallelLoops() >= 2);
           }));
 }
+
+static void hoistMemcpy(func::FuncOp func) {
+  bool changed = true;
+  SmallVector<Operation*> toDelete;
+  IREE::Codegen::LoweringConfigAttr fwdAttr;
+  func.walk([&](Operation* op) {
+    IREE::Codegen::LoweringConfigAttr configAttr = getLoweringConfig(op);
+    if(configAttr)
+      fwdAttr = configAttr;
+  });
+  while (changed) {
+    changed = false;
+    // First move loop invariant ops outside of their loop. This needs to be
+    // done before as we cannot move ops without interputing the function walk.
+    func.walk([&](LoopLikeOpInterface loopLike) {
+      moveLoopInvariantCode(loopLike);
+    });
+
+    func.walk([&](memref::CopyOp copyOp) {
+      auto loop = dyn_cast<scf::ForOp>(copyOp->getParentOp());
+      if (!loop)
+        return WalkResult::advance();
+      Operation* definingOp = copyOp.target().getDefiningOp();
+
+      SetVector<Operation *> forwardSlice;
+      getForwardSlice(definingOp, &forwardSlice);
+      auto lastCopy = dyn_cast<memref::CopyOp>(forwardSlice.back());
+      if(!lastCopy || lastCopy == copyOp)
+        return WalkResult::advance();
+      if(copyOp.target() != lastCopy.source() || copyOp.source() != lastCopy.target())
+        return WalkResult::advance();
+      // TODO: may want to memoize this information for performance but it
+      // likely gets invalidated often.
+      DominanceInfo dom(loop);
+      PostDominanceInfo postDom(loop);
+      if (!dom.properlyDominates(copyOp, lastCopy))
+        return WalkResult::advance();
+      for (Operation *op : forwardSlice) {
+        if (!loop->isAncestor(op)) continue;
+        if (!dom.dominates(copyOp, op) || !postDom.postDominates(lastCopy, op))
+          return WalkResult::advance();
+      }
+
+      // Hoist read before.
+      loop.moveOutOfLoop(copyOp);
+      copyOp->removeAttr(linalg::LinalgTransforms::kLinalgTransformMarker);
+      lastCopy->removeAttr(linalg::LinalgTransforms::kLinalgTransformMarker);
+      copyOp->setAttr(
+          linalg::LinalgTransforms::kLinalgTransformMarker,
+          StringAttr::get(copyOp.getContext(), getWorkgroupMemoryMarker()));
+      lastCopy->setAttr(
+          linalg::LinalgTransforms::kLinalgTransformMarker,
+          StringAttr::get(copyOp.getContext(), getWorkgroupMemoryMarker()));
+      setLoweringConfig(copyOp, fwdAttr);
+      setLoweringConfig(lastCopy, fwdAttr);
+      lastCopy->moveAfter(loop);
+
+      {
+        OpBuilder b(copyOp);
+        createLinalgCopyOp(b, copyOp.getLoc(), copyOp.source(), copyOp.target(),
+                           copyOp->getAttrs());
+        toDelete.push_back(copyOp.getOperation());
+      }
+      {
+        OpBuilder b(lastCopy);
+        createLinalgCopyOp(b, lastCopy.getLoc(), lastCopy.source(),
+                           lastCopy.target(), lastCopy->getAttrs());
+        toDelete.push_back(lastCopy.getOperation());
+      }
+      // Hoist write after.
+      // need to interput as moving ops outside the loop may invalidate the
+      // iterators.
+      return WalkResult::interrupt();
+    });
+  }
+  for(Operation* op : toDelete)
+    op->erase();
+} 
 
 namespace {
 struct LLVMGPUTileAndDistributePass
@@ -292,6 +372,7 @@ struct LLVMGPUTileAndDistributePass
                                               std::move(promotionPatterns)))) {
         return signalPassFailure();
       }
+      hoistMemcpy(funcOp);
       // Insert barriers before and after copies to workgroup memory and skip
       // insert barriers between back to back copy to workgroup memory.
       OpBuilder builder(&getContext());
