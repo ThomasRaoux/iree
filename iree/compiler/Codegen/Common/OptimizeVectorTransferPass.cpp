@@ -121,6 +121,21 @@ struct OptimizeVectorTransferPass
     // Delete potential dead alloc and associated ops after store to load
     // forwarding.
     eraseDeadAllocAndStores(funcOp);
+
+    SmallVector<vector::TransferWriteOp> dead;
+    funcOp.walk([&dead](vector::TransferWriteOp writeOp) {
+      bool todelete = true;
+      if (writeOp.getSource()
+              .getType()
+              .cast<MemRefType>()
+              .getMemorySpaceAsInt() == 3)
+        todelete = false;
+      for (Value i : writeOp.getIndices()) {
+        if (!isa<arith::ConstantOp>(i.getDefiningOp())) todelete = false;
+      }
+      if (todelete) dead.push_back(writeOp);
+    });
+    for (auto w : dead) w.erase();
   }
 };
 

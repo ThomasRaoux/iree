@@ -280,15 +280,15 @@ static void hoistMemcpy(func::FuncOp func) {
       // Hoist read before.
       loop.moveOutOfLoop(copyOp);
       copyOp->removeAttr(linalg::LinalgTransforms::kLinalgTransformMarker);
-      lastCopy->removeAttr(linalg::LinalgTransforms::kLinalgTransformMarker);
+    //  lastCopy->removeAttr(linalg::LinalgTransforms::kLinalgTransformMarker);
       copyOp->setAttr(
           linalg::LinalgTransforms::kLinalgTransformMarker,
           StringAttr::get(copyOp.getContext(), getWorkgroupMemoryMarker()));
-      lastCopy->setAttr(
-          linalg::LinalgTransforms::kLinalgTransformMarker,
-          StringAttr::get(copyOp.getContext(), getWorkgroupMemoryMarker()));
+   //   lastCopy->setAttr(
+   //       linalg::LinalgTransforms::kLinalgTransformMarker,
+   //       StringAttr::get(copyOp.getContext(), getWorkgroupMemoryMarker()));
       setLoweringConfig(copyOp, fwdAttr);
-      setLoweringConfig(lastCopy, fwdAttr);
+   //   setLoweringConfig(lastCopy, fwdAttr);
       lastCopy->moveAfter(loop);
 
       {
@@ -297,12 +297,12 @@ static void hoistMemcpy(func::FuncOp func) {
                            copyOp->getAttrs());
         toDelete.push_back(copyOp.getOperation());
       }
-      {
+      /*{
         OpBuilder b(lastCopy);
         createLinalgCopyOp(b, lastCopy.getLoc(), lastCopy.source(),
                            lastCopy.target(), lastCopy->getAttrs());
         toDelete.push_back(lastCopy.getOperation());
-      }
+      }*/
       // Hoist write after.
       // need to interput as moving ops outside the loop may invalidate the
       // iterators.
