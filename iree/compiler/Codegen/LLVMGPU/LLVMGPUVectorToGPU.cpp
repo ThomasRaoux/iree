@@ -227,10 +227,10 @@ struct LLVMGPUVectorToGPUPass
       return signalPassFailure();
     }
     RewritePatternSet patterns(funcOp.getContext());
-    populatePrepareVectorToMMAPatterns(patterns);
+    populatePrepareVectorToMMAPatterns(patterns, true);
     (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
 
-    convertVectorToMMAOps(funcOp);
+    convertVectorToNVVMCompatibleMMASync(funcOp);
     createAsyncGroups(funcOp);
   }
 };
