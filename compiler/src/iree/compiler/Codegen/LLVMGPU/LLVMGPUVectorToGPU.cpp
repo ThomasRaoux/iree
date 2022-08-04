@@ -246,17 +246,14 @@ struct UnrollMMASync : public OpRewritePattern<nvgpu::MmaSyncOp> {
 
   LogicalResult matchAndRewrite(nvgpu::MmaSyncOp op,
                                 PatternRewriter& rewriter) const override {
-    auto aType = op.getMatrixA().getType().cast<VectorType>();
-
     int64_t m = op.getMmaShape()[0].cast<IntegerAttr>().getInt();
     int64_t n = op.getMmaShape()[1].cast<IntegerAttr>().getInt();
     int64_t k = op.getMmaShape()[2].cast<IntegerAttr>().getInt();
     std::array<int64_t, 3> gemmShape{m, n, k};
-    bool f16Input = aType.getElementType().isF16();
-    std::array<int64_t, 3> nativeShape{16, 8, f16Input ? 8 : 4};
+    std::array<int64_t, 3> nativeShape{16, 8, 16};
     std::array<int64_t, 2> strides = {1, 1};
-    std::array<int64_t, 2> aShape = {2, 2};
-    std::array<int64_t, 2> bShape = {1, 2};
+    std::array<int64_t, 2> aShape = {4, 2};
+    std::array<int64_t, 2> bShape = {2, 2};
     std::array<int64_t, 2> cShape = {2, 2};
 
     if(gemmShape == nativeShape)
