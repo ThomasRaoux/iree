@@ -325,6 +325,18 @@ struct LLVMGPUVectorToGPUPass
     createAsyncGroups(funcOp);
 
     if (llvmgpuUseMMASync) {
+
+      SmallVector<Operation*> opsToErase;
+      do {
+      opsToErase.clear();
+      funcOp.walk([&](Operation* op) {
+        if (isOpTriviallyDead(op))
+          opsToErase.push_back(op);
+      });
+      for(Operation* op : opsToErase)
+        op->erase();
+      } while(!opsToErase.empty());
+
       swizzleSharedMemory(funcOp);
 
       // Make the mma.sync a legal size.
