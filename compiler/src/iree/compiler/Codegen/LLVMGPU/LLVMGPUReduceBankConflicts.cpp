@@ -22,7 +22,7 @@ static void padAlloc(memref::AllocOp allocOp) {
   unsigned bitwidth =
       mlir::DataLayout::closest(allocOp).getTypeSizeInBits(elType);
   // Pad with 128bits==16bytes so that accesses are still aligned on 16bytes.
-  int64_t paddingSize = 128 / bitwidth;
+  int64_t paddingSize = (4*32) / bitwidth;
   SmallVector<int64_t> shape = llvm::to_vector(allocOp.getType().getShape());
   shape.back() = shape.back() + paddingSize;
   MemRefType allocType = MemRefType::get(
@@ -54,7 +54,8 @@ struct LLVMGPUReduceBankConflictsPass
     // Collect all the alloc operations.
     funcOp.walk([&](memref::AllocOp allocOp) {
       if (allocOp.getType().getMemorySpaceAsInt() ==
-          gpu::GPUDialect::getWorkgroupAddressSpace()) {
+          gpu::GPUDialect::getWorkgroupAddressSpace() &&
+         allocOp.getMemref().getType().cast<MemRefType>().getRank() == 2) {
         sharedMemAllocs.push_back(allocOp);
       }
     });
