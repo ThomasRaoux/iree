@@ -33,7 +33,7 @@ static llvm::cl::opt<unsigned> logSwizzleTile(
 /// performance with mma.sync we can drop wmma support and remove this flag.
 llvm::cl::opt<bool> llvmgpuUseMMASync(
     "iree-codegen-llvmgpu-use-mma-sync",
-    llvm::cl::desc("use mma sync instead of wmma ops"), llvm::cl::init(false));
+    llvm::cl::desc("use mma sync instead of wmma ops"), llvm::cl::init(true));
 
 static FailureOr<Value> gpuAllocationFn(OpBuilder &builder, Location loc,
                                         MemRefType memRefType,
