@@ -64,11 +64,11 @@ static void getPipelineStages(scf::ForOp forOp,
       ops.push_back(std::make_pair(&op, depth));
   }
   for (Operation& op : forOp.getBody()->getOperations()) {
-    if (ldMatrixDep.count(&op) && !loadDep.count(&op))
-      ops.push_back(std::make_pair(&op, depth - 1));
+    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
   }
   for (Operation& op : forOp.getBody()->getOperations()) {
-    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
+    if (ldMatrixDep.count(&op) && !loadDep.count(&op))
+      ops.push_back(std::make_pair(&op, depth - 1));
   }
 
 }
@@ -80,16 +80,16 @@ static void setAsyncAnnotations(Operation* op,
   if (!waitOp || waitOp.getNumGroups()) return;
   int numGroupInFlight = 0;
   if (part == scf::PipeliningOption::PipelinerPart::Kernel) {
-    numGroupInFlight = depth - 2;
+    numGroupInFlight = depth - 1;
   } else {
     // By construction there should be no wait op in the prologue as all the
     // wait should be in the last stage.
     if(part == scf::PipeliningOption::PipelinerPart::Prologue) {
-        numGroupInFlight = depth - 2;
+        numGroupInFlight = depth - 1;
     } else {
     // Based on the schedule we pick we know how many groups are in flight for
     // each iteration of the epilogue.
-    numGroupInFlight = depth - 2 - iteration;
+    numGroupInFlight = depth - 1 - iteration;
     }
   }
   OpBuilder b(op);
@@ -109,6 +109,7 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
       OpBuilder builder(forOp.getContext());
       SmallVector<Operation*> barriers;
       bool waitFound = false;
+      int ldmatrixCounter = 0;
       for (Operation& op : forOp.getBody()->getOperations()) {
         // Pipeline the most inner for op that should be a flat region.
         if (op.getNumRegions() > 0) return;
@@ -132,7 +133,9 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
         }
         if (isa<nvgpu::LdMatrixOp, nvgpu::DeviceAsyncWaitOp>(op)) {
           waitFound = true;
-          op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
+          if(ldmatrixCounter < 8)
+            op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
+          ldmatrixCounter++;  
         }
         auto ld = dyn_cast<vector::TransferReadOp>(op);
         if (!ld) continue;
