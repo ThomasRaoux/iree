@@ -22,6 +22,7 @@ namespace iree_compiler {
 
 static const StringLiteral kPipeliningLoopMarker = "__pipelining_K_loop__";
 static const StringLiteral kPipeliningGlobalLoad = "__pipelining_global_load__";
+static const StringLiteral kPipeliningLdmatrix = "__pipelining_ldmatrix__";
 
 /// Helper to recursively add operation dependencies within `block` to `dep`
 /// set.
@@ -43,21 +44,31 @@ static void getPipelineStages(scf::ForOp forOp,
 
   // Track dependencies of the global memory load.
   llvm::SmallDenseSet<Operation*> loadDep;
+  llvm::SmallDenseSet<Operation*> ldMatrixDep;
   for (Operation& op : forOp.getBody()->getOperations()) {
     if (op.hasAttr(kPipeliningGlobalLoad)) {
       addDepOps(loadDep, &op, forOp.getBody());
     }
+    if (op.hasAttr(kPipeliningLdmatrix)) {
+      addDepOps(ldMatrixDep, &op, forOp.getBody());
+    }
   }
+  
   // Create a modulo schedule with loads from global memory and the operations
   // it depends on in stage 0. Store to shared memory and computation are in
   // stage `maxDepth`. In order to have a correct scheduling even with back
   // edges we order stages in decreasing order.
   for (Operation& op : forOp.getBody()->getOperations()) {
-    if (!loadDep.count(&op) && !isa<scf::YieldOp>(op))
+    if (!loadDep.count(&op) && !ldMatrixDep.count(&op) &&
+        !isa<scf::YieldOp>(op))
       ops.push_back(std::make_pair(&op, depth));
   }
   for (Operation& op : forOp.getBody()->getOperations()) {
     if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
+  }
+  for (Operation& op : forOp.getBody()->getOperations()) {
+    if (ldMatrixDep.count(&op) && !loadDep.count(&op))
+      ops.push_back(std::make_pair(&op, depth - 1));
   }
 }
 
@@ -72,10 +83,13 @@ static void setAsyncAnnotations(Operation* op,
   } else {
     // By construction there should be no wait op in the prologue as all the
     // wait should be in the last stage.
-    assert(part == scf::PipeliningOption::PipelinerPart::Epilogue);
+    if(part == scf::PipeliningOption::PipelinerPart::Prologue) {
+        numGroupInFlight = depth - 1;
+    } else {
     // Based on the schedule we pick we know how many groups are in flight for
     // each iteration of the epilogue.
     numGroupInFlight = depth - 1 - iteration;
+    }
   }
   OpBuilder b(op);
   waitOp->setAttr(waitOp.getNumGroupsAttrName(),
@@ -109,6 +123,9 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
           }
           barriers.clear();
           continue;
+        }
+        if (isa<nvgpu::LdMatrixOp, nvgpu::DeviceAsyncWaitOp>(op)) {
+            op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
         }
         auto ld = dyn_cast<vector::TransferReadOp>(op);
         if (!ld) continue;
