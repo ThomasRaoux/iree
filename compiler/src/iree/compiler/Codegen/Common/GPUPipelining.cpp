@@ -108,11 +108,16 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
       bool copyToWorkgroupMemory = false;
       OpBuilder builder(forOp.getContext());
       SmallVector<Operation*> barriers;
+      bool waitFound = false;
       for (Operation& op : forOp.getBody()->getOperations()) {
         // Pipeline the most inner for op that should be a flat region.
         if (op.getNumRegions() > 0) return;
         if (isa<gpu::BarrierOp>(op)) {
-          barriers.push_back(&op);
+          if(waitFound) {
+            op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
+          } else {
+           barriers.push_back(&op);
+          }
         }
         if (isa<nvgpu::DeviceAsyncCopyOp, nvgpu::DeviceAsyncCreateGroupOp>(
                 op)) {
@@ -126,7 +131,8 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
           continue;
         }
         if (isa<nvgpu::LdMatrixOp, nvgpu::DeviceAsyncWaitOp>(op)) {
-            op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
+          waitFound = true;
+          op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
         }
         auto ld = dyn_cast<vector::TransferReadOp>(op);
         if (!ld) continue;
