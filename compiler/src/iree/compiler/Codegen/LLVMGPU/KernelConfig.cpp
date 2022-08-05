@@ -43,7 +43,7 @@ struct TileWorkgroupSizePair {
 };
 
 // Software pipeline depths
-constexpr unsigned softwarePipelineDepthTensorCore = 3;
+constexpr unsigned softwarePipelineDepthTensorCore = 4;
 // Simt codegen does not do software pipelining.
 constexpr unsigned softwarePipelineDepthSimt = 0;
 }  // namespace
