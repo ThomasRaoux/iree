@@ -64,12 +64,13 @@ static void getPipelineStages(scf::ForOp forOp,
       ops.push_back(std::make_pair(&op, depth));
   }
   for (Operation& op : forOp.getBody()->getOperations()) {
-    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
-  }
-  for (Operation& op : forOp.getBody()->getOperations()) {
     if (ldMatrixDep.count(&op) && !loadDep.count(&op))
       ops.push_back(std::make_pair(&op, depth - 1));
   }
+  for (Operation& op : forOp.getBody()->getOperations()) {
+    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
+  }
+
 }
 
 static void setAsyncAnnotations(Operation* op,
@@ -79,16 +80,16 @@ static void setAsyncAnnotations(Operation* op,
   if (!waitOp || waitOp.getNumGroups()) return;
   int numGroupInFlight = 0;
   if (part == scf::PipeliningOption::PipelinerPart::Kernel) {
-    numGroupInFlight = depth - 1;
+    numGroupInFlight = depth - 2;
   } else {
     // By construction there should be no wait op in the prologue as all the
     // wait should be in the last stage.
     if(part == scf::PipeliningOption::PipelinerPart::Prologue) {
-        numGroupInFlight = depth - 1;
+        numGroupInFlight = depth - 2;
     } else {
     // Based on the schedule we pick we know how many groups are in flight for
     // each iteration of the epilogue.
-    numGroupInFlight = depth - 1 - iteration;
+    numGroupInFlight = depth - 2 - iteration;
     }
   }
   OpBuilder b(op);
