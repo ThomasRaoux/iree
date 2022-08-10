@@ -175,6 +175,8 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
                                             std::move(pipeliningPatterns)))) {
       return signalPassFailure();
     }
+    // Rearrange ldmatrix closer to the mma.sync
+    
   }
 
  private:
