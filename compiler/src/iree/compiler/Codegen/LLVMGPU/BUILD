@@ -24,6 +24,7 @@ iree_compiler_cc_library(
         "LLVMGPUReduceBankConflicts.cpp",
         "LLVMGPUTensorCoreVectorization.cpp",
         "LLVMGPUTileAndDistribute.cpp",
+        "LLVMGPUTileSerialLoops.cpp",
         "LLVMGPUVectorLowering.cpp",
         "LLVMGPUVectorToGPU.cpp",
         "LLVMGPUVectorization.cpp",

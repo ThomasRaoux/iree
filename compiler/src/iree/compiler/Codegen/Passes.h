@@ -339,6 +339,9 @@ std::unique_ptr<OperationPass<ModuleOp>> createConvertToROCDLPass();
 std::unique_ptr<OperationPass<func::FuncOp>> createLLVMGPUTileAndDistribute(
     bool distributeToWarp = false);
 
+/// Perform tiling to serial loops.
+std::unique_ptr<OperationPass<func::FuncOp>> createLLVMGPUTileSerialLoops();
+
 /// Create pass calling the dynamic pipeline for LLVMGPU.
 std::unique_ptr<OperationPass<IREE::HAL::ExecutableVariantOp>>
 createLLVMGPULowerExecutableTargetPass();

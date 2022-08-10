@@ -309,6 +309,12 @@ def LLVMGPUTileAndDistribute :
   let constructor = "mlir::iree_compiler::createLLVMGPUTileAndDistribute()";
 }
 
+def LLVMGPUTileSerialLoops :
+    Pass<"iree-llvmgpu-tile-serial-loops", "func::FuncOp"> {
+  let summary = "Pass to tile to serial loops.";
+  let constructor = "mlir::iree_compiler::createLLVMGPUTileSerialLoops()";
+}
+
 def LLVMGPUVectorization :
     Pass<"iree-llvmgpu-vectorization", "func::FuncOp"> {
   let summary = "Pass to convert linalg into Vector.";

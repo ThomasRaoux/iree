@@ -144,6 +144,26 @@ class InsertElementToBroadcast final
   }
 };
 
+class CanonicalizeReduction final
+    : public OpRewritePattern<vector::MultiDimReductionOp> {
+ public:
+  using OpRewritePattern<vector::MultiDimReductionOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(vector::MultiDimReductionOp reduceOp,
+                                PatternRewriter &rewriter) const override {
+    if (reduceOp.getSourceVectorType().getNumElements() !=
+        reduceOp.getDestType().cast<VectorType>().getNumElements())
+      return failure();
+    Value source =
+        rewriter.create<vector::ExtractOp>(reduceOp.getLoc(), reduceOp.getSource(), 0);
+    Value result =
+        makeArithReduction(rewriter, reduceOp.getLoc(), reduceOp.getKind(),
+                           source, reduceOp.getAcc());
+    rewriter.replaceOp(reduceOp, result);
+    return success();
+  }
+};
+
 struct LLVMGPUReduceToGPUPass
     : public LLVMGPUReduceToGPUBase<LLVMGPUReduceToGPUPass> {
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -157,15 +177,19 @@ struct LLVMGPUReduceToGPUPass
     // 1. Pre-process multiDimReductions.
     // TODO: Remove once MultiDimReduce is supported by distribute patterns.
     {
-      RewritePatternSet patterns(ctx);
+      RewritePatternSet patterns1(ctx);
+      patterns1.add<CanonicalizeReduction>(ctx);
+      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns1));
+
+      RewritePatternSet patterns2(ctx);
       vector::populateVectorMultiReductionLoweringPatterns(
-          patterns, vector::VectorMultiReductionLowering::InnerReduction);
+          patterns2, vector::VectorMultiReductionLowering::InnerReduction);
       // Add clean up patterns after lowering of multidimreduce lowering.
-      patterns.add<InsertElementToBroadcast>(ctx);
-      vector::ShapeCastOp::getCanonicalizationPatterns(patterns, ctx);
-      vector::BroadcastOp::getCanonicalizationPatterns(patterns, ctx);
-      vector::ExtractOp::getCanonicalizationPatterns(patterns, ctx);
-      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+      patterns2.add<InsertElementToBroadcast>(ctx);
+      vector::ShapeCastOp::getCanonicalizationPatterns(patterns2, ctx);
+      vector::BroadcastOp::getCanonicalizationPatterns(patterns2, ctx);
+      vector::ExtractOp::getCanonicalizationPatterns(patterns2, ctx);
+      (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns2));
     }
 
     DEBUG_WITH_TYPE(DEBUG_TYPE, {
@@ -240,6 +264,18 @@ struct LLVMGPUReduceToGPUPass
     // 5. Propagate vector distribution.
     {
       RewritePatternSet patterns(ctx);
+         auto distributionFn = [](vector::TransferWriteOp writeOp) {
+        // Create a map (d0, d1) -> (d1) to distribute along the inner
+        // dimension. Once we support n-d distribution we can add more
+        // complex cases.
+        int64_t vecRank = writeOp.getVectorType().getRank();
+        OpBuilder builder(writeOp.getContext());
+        auto map =
+            AffineMap::get(vecRank, 0, builder.getAffineDimExpr(vecRank - 1));
+        return map;
+      };
+      vector::populateDistributeTransferWriteOpPatterns(patterns,
+                                                        distributionFn);
       vector::populatePropagateWarpVectorDistributionPatterns(patterns);
       vector::populateDistributeReduction(patterns, groupReduction);
       (void)applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));

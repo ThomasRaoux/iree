@@ -167,6 +167,16 @@ struct LLVMGPUVectorizationPass
         llvm::dbgs() << "\n\n";
       });
     }
+
+    {
+      // Step 4. Hoisting transfer ops.
+      linalg::hoistRedundantVectorTransfersOnTensor(funcOp);
+      DEBUG_WITH_TYPE(DEBUG_TYPE, {
+        llvm::dbgs() << "\n--- After Step 4: Hoist transfer ops. ---\n";
+        funcOp.print(llvm::dbgs(), OpPrintingFlags().useLocalScope());
+        llvm::dbgs() << "\n\n";
+      });
+    }
   }
 };
 }  // namespace

@@ -488,13 +488,19 @@ static LogicalResult setWarpReductionConfig(func::FuncOp entryPoint,
   Optional<int64_t> dimSize = getLinalgDimSize(op, reductionDims[0]);
   if (!dimSize || *dimSize % cudaWarpSize != 0) return failure();
   // TODO: Add reduction tiling to handle larger reductions.
-  if (*dimSize > 1024) return failure();
+  int64_t reductionTileSize = *dimSize;
+  if (*dimSize > 1024) {
+    reductionTileSize = 1024;
+    while(*dimSize % reductionTileSize != 0)
+      reductionTileSize -= cudaWarpSize;
+  }
+  assert(reductionTileSize > 0);
   SmallVector<unsigned> parallelDims;
   op.getParallelDims(parallelDims);
   unsigned vectorSize = 4;
-  while ((*dimSize / vectorSize) % cudaWarpSize != 0) vectorSize /= 2;
+  while ((reductionTileSize / vectorSize) % cudaWarpSize != 0) vectorSize /= 2;
 
-  std::array<int64_t, 3> workgroupSize = {*dimSize / vectorSize, 1, 1};
+  std::array<int64_t, 3> workgroupSize = {reductionTileSize / vectorSize, 1, 1};
 
   SmallVector<unsigned> partitionedLoops =
       cast<PartitionableLoopsInterface>(op.getOperation())
@@ -504,8 +510,13 @@ static LogicalResult setWarpReductionConfig(func::FuncOp entryPoint,
   size_t numLoops = partitionedLoops.empty() ? 0 : partitionedLoops.back() + 1;
   // Tile all the parallel dimension to 1.
   SmallVector<int64_t, 4> workgroupTileSizes(numLoops, 1);
+  SmallVector<int64_t, 4> reductionTileSizes(numLoops, 0);
+  reductionTileSizes.push_back(reductionTileSize);
   TileSizesListType tileSizes;
-  tileSizes.emplace_back(std::move(workgroupTileSizes));  // Workgroup level
+  // Workgroup level tiles.
+  tileSizes.emplace_back(std::move(workgroupTileSizes));  
+  // Reduction level not distributed.
+  tileSizes.emplace_back(std::move(reductionTileSizes));  
   return setOpConfigAndEntryPointFnTranslation(
       entryPoint, op, tileSizes,
       IREE::Codegen::DispatchLoweringPassPipeline::LLVMGPUWarpReduction,
