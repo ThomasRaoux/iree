@@ -12,6 +12,7 @@
 #include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <iostream>
 
 //====---------------------------------------------------------------------===//
 // Pass to pipeline copy to shared memory for matmul op.
@@ -175,8 +176,33 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
                                             std::move(pipeliningPatterns)))) {
       return signalPassFailure();
     }
-    // Rearrange ldmatrix closer to the mma.sync
     
+    // Rearrange ldmatrix closer to the mma.sync
+    // std::cout << "GPUPipeline post processing " << std::endl;
+#if 1
+    funcOp.walk([](scf::ForOp forOp) {
+      llvm::SmallDenseSet<Operation*, 32> ldMatrixOpSet;
+      for (Operation& op : forOp.getBody()->getOperations()) {
+        if (isa<nvgpu::LdMatrixOp>(op)) {
+          ldMatrixOpSet.insert(&op);
+        }
+        else if (isa<nvgpu::MmaSyncOp>(op)) {
+          
+          auto mmaOp = dyn_cast<nvgpu::MmaSyncOp>(op);
+          for (auto operand : op.getOperands()) {
+            Operation* defOp = operand.getDefiningOp();
+            if (ldMatrixOpSet.contains(defOp)) {
+              // if the defining operation is present in ldMatrixOpSet move it just above mmaOp
+              defOp->moveBefore(mmaOp);
+              // only move each ldmatrix once, just before its first mmaOp use
+              ldMatrixOpSet.erase(defOp);
+            }
+          }
+        }
+      }
+      // std::cout << "unmoved nvgpu.ldmatrix instructions " << ldMatrixOpSet.size() << std::endl;
+    });
+#endif
   }
 
  private:
