@@ -68,9 +68,11 @@ static void addBufferizePasses(OpPassManager &passManager) {
   BufferizationOptions::MemCpyFn memcpyFn = gpuCopyFn;
   addIREEComprehensiveBufferizePasses(passManager, allocationFn, deallocationFn,
                                       memcpyFn);
+  passManager.addPass(createCanonicalizerPass());
+  passManager.addPass(createCSEPass());
 }
 
-static void tileAndBufferize(OpPassManager &pm) {
+static void tileAndDistributeToWorkgroup(OpPassManager &pm) {
   pm.addPass(createTileAndDistributeToWorkgroupsPass());
 
   auto &nestedModulePM = pm.nest<ModuleOp>();
@@ -78,12 +80,13 @@ static void tileAndBufferize(OpPassManager &pm) {
       createConvertToDestinationPassingStylePass());
   nestedModulePM.addPass(createCanonicalizerPass());
   nestedModulePM.addPass(createCSEPass());
+}
 
+static void tileAndBufferize(OpPassManager &pm) {
+  tileAndDistributeToWorkgroup(pm);
+
+  auto &nestedModulePM = pm.nest<ModuleOp>();
   addBufferizePasses(nestedModulePM);
-
-  nestedModulePM.addPass(createCSEPass());
-  nestedModulePM.addPass(createCanonicalizerPass());
-  nestedModulePM.addPass(createCSEPass());
 }
 
 //===---------------------------------------------------------------------===//
@@ -191,12 +194,8 @@ void addGPUMatmulTensorCorePassPipeline(OpPassManager &pm,
 }
 
 void addGPUWarpReductionPassPipeline(OpPassManager &pm) {
-  pm.addPass(createTileAndDistributeToWorkgroupsPass());
+  tileAndDistributeToWorkgroup(pm);
   auto &nestedModulePM = pm.nest<ModuleOp>();
-  nestedModulePM.addNestedPass<func::FuncOp>(
-      createConvertToDestinationPassingStylePass());
-  nestedModulePM.addPass(createCanonicalizerPass());
-  nestedModulePM.addPass(createCSEPass());
 
   nestedModulePM.addNestedPass<func::FuncOp>(
       createRemoveSingleIterationLoopPass());
@@ -210,9 +209,6 @@ void addGPUWarpReductionPassPipeline(OpPassManager &pm) {
   nestedModulePM.addNestedPass<func::FuncOp>(createCSEPass());
 
   addBufferizePasses(nestedModulePM);
-
-  nestedModulePM.addPass(createCanonicalizerPass());
-  nestedModulePM.addPass(createCSEPass());
 
   nestedModulePM.addNestedPass<func::FuncOp>(
       createOptimizeVectorTransferPass());
