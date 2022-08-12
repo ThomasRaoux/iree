@@ -186,14 +186,14 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
         if (isa<nvgpu::LdMatrixOp>(op)) {
           ldMatrixOpSet.insert(&op);
         }
-        else if (isa<nvgpu::MmaSyncOp>(op)) {
+        else {
           
-          auto mmaOp = dyn_cast<nvgpu::MmaSyncOp>(op);
+          // auto mmaOp = dyn_cast<nvgpu::MmaSyncOp>(op);
           for (auto operand : op.getOperands()) {
             Operation* defOp = operand.getDefiningOp();
             if (ldMatrixOpSet.contains(defOp)) {
               // if the defining operation is present in ldMatrixOpSet move it just above mmaOp
-              defOp->moveBefore(mmaOp);
+              defOp->moveBefore(&op);
               // only move each ldmatrix once, just before its first mmaOp use
               ldMatrixOpSet.erase(defOp);
             }
