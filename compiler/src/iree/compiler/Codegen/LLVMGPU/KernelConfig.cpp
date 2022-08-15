@@ -403,7 +403,7 @@ static LogicalResult setRootDefaultConfig(func::FuncOp entryPoint,
   // TODO(thomasraoux): This could be improved by checking if the linalg op
   // would fail vectorization.
   if (!isa<linalg::LinalgOp>(op)) vectorSize = 1;
-
+  vectorSize = 4;
   // Set the inner most parallel loop to `lowerTs`.
   for (int64_t depth = numLoops; depth > 0; depth--) {
     if (partitionedLoopsSet.count(depth - 1)) {

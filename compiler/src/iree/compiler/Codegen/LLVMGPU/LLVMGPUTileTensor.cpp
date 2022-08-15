@@ -67,7 +67,7 @@ static void populateTilingReductionPatterns(RewritePatternSet &patterns) {
                                                     filter);
 }
 
-static void tileReduction(func::FuncOp funcOp) {
+static LogicalResult tileReduction(func::FuncOp funcOp) {
   {
     // Tile again at the workgroup level since redution dimension were
     // ignored. Dimensions already tiled will be ignore since we tile to the
@@ -76,7 +76,7 @@ static void tileReduction(func::FuncOp funcOp) {
     populateTilingReductionPatterns(wgTilingPatterns);
     if (failed(applyPatternsAndFoldGreedily(funcOp,
                                             std::move(wgTilingPatterns)))) {
-      return signalPassFailure();
+      return failure();
     }
   }
 
@@ -87,8 +87,9 @@ static void tileReduction(func::FuncOp funcOp) {
         wgTilingCanonicalizationPatterns);
     if (failed(applyPatternsAndFoldGreedily(
             funcOp, std::move(wgTilingCanonicalizationPatterns)))) {
-      return signalPassFailure();
+      return failure();
     }
+    return success();
   }
 }
 
@@ -132,7 +133,7 @@ static void populateTilingPatterns(
       toWarp ? workgroupSize[0] / kWarpSize : workgroupSize[0], workgroupSize[1], workgroupSize[2]};
 
   linalg::TileSizeComputationFunction getInnerTileSizeFn =
-      [warpPerWorkgroup](OpBuilder &builder, Operation *operation) {
+      [workersPerWorkgroup](OpBuilder &builder, Operation *operation) {
         return calculateDistributedTileSize(workersPerWorkgroup, builder,
                                             operation);
       };
@@ -153,26 +154,27 @@ static void populateTilingPatterns(
       context, tilingOptions, f);
 }
 
-static tileParallelDims(func::FuncOp funcOp, bool toWarp) {
+static LogicalResult tileParallelDims(func::FuncOp funcOp, bool toWarp, SmallVectorImpl<int64_t> &workgroupSize) {
   {
     RewritePatternSet secondLevelTilingPatterns(funcOp.getContext());
-    populateTilingPatterns(warpLevelTilingPatterns, workgroupSize, toWarp);
+    populateTilingPatterns(secondLevelTilingPatterns, workgroupSize, toWarp);
     if (failed(applyPatternsAndFoldGreedily(
-            funcOp, std::move(warpLevelTilingPatterns)))) {
-      return signalPassFailure();
+            funcOp, std::move(secondLevelTilingPatterns)))) {
+      return failure();
     }
   }
   {
     // Apply canonicalization patterns.
     RewritePatternSet threadTilingCanonicalizationPatterns =
-        linalg::getLinalgTilingCanonicalizationPatterns(context);
+        linalg::getLinalgTilingCanonicalizationPatterns(funcOp.getContext());
     populateAffineMinSCFCanonicalizationPattern(
         threadTilingCanonicalizationPatterns);
     if (failed(applyPatternsAndFoldGreedily(
             funcOp, std::move(threadTilingCanonicalizationPatterns)))) {
-      return signalPassFailure();
+      return failure();
     }
   }
+  return success();
 }
 
 namespace {
@@ -183,24 +185,31 @@ struct LLVMGPUTileTensorPass
   bool distributeToWarp = false;
 
  public:
-  LLVMGPUTileAndDistributePass(bool distributeToWarp)
+  LLVMGPUTileTensorPass(bool distributeToWarp)
       : distributeToWarp(distributeToWarp) {}
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<AffineDialect, gpu::GPUDialect>();
   }
   void runOnOperation() override {
-    MLIRContext *context = &getContext();
     auto funcOp = getOperation();
     if (!isEntryPoint(funcOp)) return;
 
-    tileReduction(funcOp);
+    if(failed(tileReduction(funcOp))) {
+      return signalPassFailure();
+    }
 
     LLVM_DEBUG({
       llvm::dbgs() << "--- After tile reductions:";
       funcOp.dump();
     });
 
-    tileParallelDims(funcOp, distributeToWarp);
+    auto workgroupSize = llvm::to_vector<4>(llvm::map_range(
+        getEntryPoint(funcOp)->getWorkgroupSize().getValue(),
+        [&](Attribute attr) { return attr.cast<IntegerAttr>().getInt(); }));
+    if(failed(tileParallelDims(funcOp, distributeToWarp, workgroupSize))) {
+      return signalPassFailure();
+    }
+
 
     LLVM_DEBUG({
       llvm::dbgs() << "--- After second level of tiling";

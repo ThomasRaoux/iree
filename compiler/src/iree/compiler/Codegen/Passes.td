@@ -304,6 +304,12 @@ def LLVMGPUTileAndDistribute :
   let constructor = "mlir::iree_compiler::createLLVMGPUTileAndDistribute()";
 }
 
+def LLVMGPUTileTensor :
+    Pass<"iree-llvmgpu-tile-tensor", "func::FuncOp"> {
+  let summary = "Pass to tile linalg on tensor ops within a workgroup.";
+  let constructor = "mlir::iree_compiler::createLLVMGPUTileTensor()";
+}
+
 def LLVMGPUVectorization :
     Pass<"iree-llvmgpu-vectorization", "func::FuncOp"> {
   let summary = "Pass to convert linalg into Vector.";
