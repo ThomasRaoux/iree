@@ -1,4 +1,4 @@
-// Copyright 2021 The IREE Authors
+// Copyright 2022 The IREE Authors
 //
 // Licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -26,9 +26,9 @@
 #include "mlir/Support/MathExtras.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
-#include "mlir/Transforms/SideEffectUtils.h"
+#include <numeric>
 
-#define DEBUG_TYPE "iree-llvmgpu-tile-and-distribute"
+#define DEBUG_TYPE "iree-llvmgpu-tile-tensor"
 
 namespace mlir {
 namespace iree_compiler {
@@ -60,7 +60,7 @@ static void populateTilingReductionPatterns(RewritePatternSet &patterns) {
   linalg::LinalgTransformationFilter filter(
       ArrayRef<StringAttr>{
           StringAttr::get(context, getWorkgroupMemoryMarker())},
-      StringAttr::get(context, getWorkgroupKTiledMarker()));
+      StringAttr::get(context, getVectorizeMarker()));
   filter.setMatchByDefault();
   linalg::TilingPatterns<linalg::MatmulOp, linalg::BatchMatmulOp,
                          linalg::GenericOp>::insert(patterns, tilingOptions,
@@ -154,25 +154,49 @@ static void populateTilingPatterns(
       context, tilingOptions, f);
 }
 
-static LogicalResult tileParallelDims(func::FuncOp funcOp, bool toWarp, SmallVectorImpl<int64_t> &workgroupSize) {
-  {
-    RewritePatternSet secondLevelTilingPatterns(funcOp.getContext());
-    populateTilingPatterns(secondLevelTilingPatterns, workgroupSize, toWarp);
-    if (failed(applyPatternsAndFoldGreedily(
-            funcOp, std::move(secondLevelTilingPatterns)))) {
-      return failure();
-    }
+
+static LogicalResult tileParallelDims(
+    func::FuncOp funcOp, SmallVectorImpl<int64_t> &workgroupSize,
+    bool distributeToWarp) {
+  std::array<int64_t, 3> elementPerWorkgroup = {
+      distributeToWarp ? workgroupSize[0] / kWarpSize : workgroupSize[0],
+      workgroupSize[1], workgroupSize[2]};
+  SmallVector<Operation *> computeOps;
+  SmallVector<LoopTilingAndDistributionInfo> tiledLoops;
+  if (failed(getComputeOps(funcOp, computeOps, tiledLoops))) {
+    return funcOp.emitOpError("failed to get compute ops");
   }
-  {
-    // Apply canonicalization patterns.
-    RewritePatternSet threadTilingCanonicalizationPatterns =
-        linalg::getLinalgTilingCanonicalizationPatterns(funcOp.getContext());
-    populateAffineMinSCFCanonicalizationPattern(
-        threadTilingCanonicalizationPatterns);
-    if (failed(applyPatternsAndFoldGreedily(
-            funcOp, std::move(threadTilingCanonicalizationPatterns)))) {
-      return failure();
+
+  for (Operation *op : computeOps) {
+    auto tilingOp = dyn_cast<TilingInterface>(op);
+    if(!tilingOp)
+      continue;
+    size_t numLoops = 0;
+    for(auto type : tilingOp.getLoopIteratorTypes()) {
+      if(type == getParallelIteratorTypeName())
+        numLoops++;
     }
+    IRRewriter rewriter(op->getContext());
+    rewriter.setInsertionPoint(op);
+    auto interfaceOp = cast<PartitionableLoopsInterface>(*op);
+    auto partitionedLoops =
+        interfaceOp.getPartitionableLoops(kNumMaxParallelDims);
+    SmallVector<OpFoldResult> numThreads(numLoops, rewriter.getIndexAttr(1));
+    int64_t id = 0;
+    int64_t dispatchId = 0;
+    SmallVector<int64_t> idDims(numLoops, -1);
+    for (unsigned loop : llvm::reverse(partitionedLoops)) {
+      int64_t num = elementPerWorkgroup[id++];
+      numThreads[loop] = rewriter.getIndexAttr(num);
+      if (num > 1) idDims[loop] = dispatchId++;
+    }
+    for (int64_t &id : idDims) {
+      if (id == -1) id = dispatchId++;
+    }
+
+    auto tilingResult = linalg::tileToForeachThreadOp(
+        rewriter, tilingOp, numThreads, idDims);
+    rewriter.replaceOp(op, tilingResult->tileOp->getResults());
   }
   return success();
 }
@@ -194,25 +218,24 @@ struct LLVMGPUTileTensorPass
     auto funcOp = getOperation();
     if (!isEntryPoint(funcOp)) return;
 
-    if(failed(tileReduction(funcOp))) {
+    auto workgroupSize = llvm::to_vector<4>(llvm::map_range(
+        getEntryPoint(funcOp)->getWorkgroupSize().getValue(),
+        [&](Attribute attr) { return attr.cast<IntegerAttr>().getInt(); }));
+    if (failed(tileParallelDims(funcOp, workgroupSize, distributeToWarp))) {
+      return signalPassFailure();
+    }
+
+    LLVM_DEBUG({
+      llvm::dbgs() << "--- After second level of tiling";
+      funcOp.dump();
+    });
+
+    if (failed(tileReduction(funcOp))) {
       return signalPassFailure();
     }
 
     LLVM_DEBUG({
       llvm::dbgs() << "--- After tile reductions:";
-      funcOp.dump();
-    });
-
-    auto workgroupSize = llvm::to_vector<4>(llvm::map_range(
-        getEntryPoint(funcOp)->getWorkgroupSize().getValue(),
-        [&](Attribute attr) { return attr.cast<IntegerAttr>().getInt(); }));
-    if(failed(tileParallelDims(funcOp, distributeToWarp, workgroupSize))) {
-      return signalPassFailure();
-    }
-
-
-    LLVM_DEBUG({
-      llvm::dbgs() << "--- After second level of tiling";
       funcOp.dump();
     });
   }

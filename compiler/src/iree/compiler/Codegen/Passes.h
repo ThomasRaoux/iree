@@ -337,6 +337,8 @@ std::unique_ptr<OperationPass<func::FuncOp>> createLLVMGPUTileAndDistribute(
 std::unique_ptr<OperationPass<func::FuncOp>> createLLVMGPUTileTensor(
     bool distributeToWarp = false);
 
+std::unique_ptr<OperationPass<func::FuncOp>> createLLVMGPUDistribute();
+
 /// Create pass calling the dynamic pipeline for LLVMGPU.
 std::unique_ptr<OperationPass<IREE::HAL::ExecutableVariantOp>>
 createLLVMGPULowerExecutableTargetPass();

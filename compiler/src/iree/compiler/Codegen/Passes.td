@@ -310,6 +310,12 @@ def LLVMGPUTileTensor :
   let constructor = "mlir::iree_compiler::createLLVMGPUTileTensor()";
 }
 
+def LLVMGPUDistribute :
+    Pass<"iree-llvmgpu-distribute", "func::FuncOp"> {
+  let summary = "Pass to distribute foreachthread ops.";
+  let constructor = "mlir::iree_compiler::createLLVMGPUDistribute()";
+}
+
 def LLVMGPUVectorization :
     Pass<"iree-llvmgpu-vectorization", "func::FuncOp"> {
   let summary = "Pass to convert linalg into Vector.";

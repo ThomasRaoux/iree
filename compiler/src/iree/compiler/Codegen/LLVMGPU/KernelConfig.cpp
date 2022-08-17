@@ -352,6 +352,9 @@ static LogicalResult setRootDefaultConfig(func::FuncOp entryPoint,
     return setOpConfigAndEntryPointFnTranslation(entryPoint, op, tileSizes,
                                                  passPipeline, {1, 1, 1});
   }
+  if (!isa<linalg::LinalgOp>(op)) {
+
+  }
 
   size_t numLoops = partitionedLoops.back() + 1;
   // To get peak occupancy we need a workgroup size of at least two warps
@@ -402,8 +405,13 @@ static LogicalResult setRootDefaultConfig(func::FuncOp entryPoint,
   // Pick a vectorSize of 1 for op that we know won't get vectorizedd.
   // TODO(thomasraoux): This could be improved by checking if the linalg op
   // would fail vectorization.
-  if (!isa<linalg::LinalgOp>(op)) vectorSize = 1;
-  vectorSize = 4;
+  if (!isa<linalg::LinalgOp>(op) || op->getNumResults() > 1) {
+    vectorSize = 1;
+  } else {
+    passPipeline =
+        IREE::Codegen::DispatchLoweringPassPipeline::LLVMGPUVectorize;
+  }
+
   // Set the inner most parallel loop to `lowerTs`.
   for (int64_t depth = numLoops; depth > 0; depth--) {
     if (partitionedLoopsSet.count(depth - 1)) {
@@ -417,10 +425,8 @@ static LogicalResult setRootDefaultConfig(func::FuncOp entryPoint,
     workgroupTileSizes.append(linalgOp.getNumReductionLoops(), 4);
   }
   tileSizes.emplace_back(std::move(workgroupTileSizes));  // Workgroup level
-  return setOpConfigAndEntryPointFnTranslation(
-      entryPoint, op, tileSizes,
-      IREE::Codegen::DispatchLoweringPassPipeline::LLVMGPUVectorize,
-      workgroupSize);
+  return setOpConfigAndEntryPointFnTranslation(entryPoint, op, tileSizes,
+                                               passPipeline, workgroupSize);
 }
 
 /// Propagate the configuration annotated in the incoming IR.

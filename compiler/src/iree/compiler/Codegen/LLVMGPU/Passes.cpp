@@ -94,11 +94,11 @@ static void tileAndBufferize(OpPassManager &pm) {
 //===---------------------------------------------------------------------===//
 
 void addGPUVectorizationPassPipeline(OpPassManager &pm) {
-  tileAndBufferize(pm);
+  tileAndDistributeToWorkgroup(pm);
 
   auto &nestedModulePM = pm.nest<ModuleOp>();
   // Distribute linalg onto threads within the workgroup.
-  nestedModulePM.addNestedPass<func::FuncOp>(createLLVMGPUTileAndDistribute());
+  nestedModulePM.addNestedPass<func::FuncOp>(createLLVMGPUTileTensor(false));
   nestedModulePM.addPass(createCanonicalizerPass());
   nestedModulePM.addPass(createCSEPass());
 
@@ -111,6 +111,8 @@ void addGPUVectorizationPassPipeline(OpPassManager &pm) {
   nestedModulePM.addNestedPass<func::FuncOp>(createCSEPass());
   nestedModulePM.addNestedPass<func::FuncOp>(
       createOptimizeVectorTransferPass());
+  addBufferizePasses(nestedModulePM);
+  nestedModulePM.addNestedPass<func::FuncOp>(createLLVMGPUDistribute());
 }
 
 void addGPUMatmulSimtPassPipeline(OpPassManager &pm) {
