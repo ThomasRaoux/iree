@@ -70,6 +70,7 @@ static FailureOr<SmallVector<T>> getPermuted(
 static FailureOr<SmallVector<OpFoldResult>> getNumThreads(
     OpBuilder &b, scf::ForeachThreadOp foreachThreadOp) {
   SmallVector<OpFoldResult> threadCount = foreachThreadOp.getNumThreads();
+  threadCount.resize(3, b.getIndexAttr(1));
   return getPermuted(foreachThreadOp, threadCount);
 }
 
@@ -79,21 +80,27 @@ static FailureOr<SmallVector<OpFoldResult>> getNumThreads(
 static FailureOr<SmallVector<Value>> getThreadIndices(
     OpBuilder &b, scf::ForeachThreadOp foreachThreadOp) {
   SmallVector<Value> threadCount = foreachThreadOp.getThreadIndices();
+  threadCount.resize(3, Value());
   return getPermuted(foreachThreadOp, threadCount);
 }
 
-static LogicalResult rewriteForeachThreadToGpu(
+
+FailureOr<SmallVector<OpFoldResult>> rewriteForeachThreadToGpu(
     scf::ForeachThreadOp foreachThreadOp,
-    const SmallVector<int64_t> &globalWorkgroupSizes, RewriterBase &rewriter) {
+    const SmallVector<int64_t> &globalWorkgroupSizes,
+    IRRewriter &rewriter) {
   if (foreachThreadOp.getNumResults() > 0)
     return foreachThreadOp->emitError(
         "only bufferized scf.foreach_thread lowers to gpu.thread");
+  if (foreachThreadOp.getNumThreads().size() > 3)
+    return foreachThreadOp->emitError(
+        "scf.foreach_thread with rank > 3 does not lower to gpu.thread");
 
   auto maybeWorkgroupSizes = getNumThreads(rewriter, foreachThreadOp);
   if (failed(maybeWorkgroupSizes))
     return foreachThreadOp->emitError("unsupported dynamic workgroup size");
 
-  SmallVector<OpFoldResult> dynamicWorkgroupSize = *maybeWorkgroupSizes;
+  SmallVector<OpFoldResult> workgroupSizes = *maybeWorkgroupSizes;
 
   // Step 1. Create the gpu.thread ops
   Location loc = foreachThreadOp.getLoc();
@@ -102,24 +109,18 @@ static LogicalResult rewriteForeachThreadToGpu(
   SmallVector<gpu::Dimension, 3> gpuDims{gpu::Dimension::x, gpu::Dimension::y,
                                          gpu::Dimension::z};
   SmallVector<Value, 3> threadOps;
-  Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+  for (int64_t idx : llvm::seq<int64_t>(0, workgroupSizes.size())) {
+    threadOps.push_back(
+        rewriter.create<gpu::ThreadIdOp>(loc, indexType, gpuDims[idx]));
+  }
+
   // Step 2. Maybe create conditionals to predicate the region.
-  int64_t idx = 0;
   Value predicate;
-  for (OpFoldResult workgroupSize : dynamicWorkgroupSize) {
+  for (auto it : llvm::zip(threadOps, workgroupSizes, globalWorkgroupSizes)) {
+    auto threadId = std::get<0>(it);
+    auto workgroupSize = std::get<1>(it);
+    auto globalWorkgroupSize = std::get<2>(it);
     auto cstWgSize = getConstantIntValue(workgroupSize);
-    // Skip dimensions not distributed.
-    if(cstWgSize && *cstWgSize == 1) {
-      threadOps.push_back(zero);
-      continue;
-    }
-    if(idx >= 3)
-      return foreachThreadOp->emitError("more than 3 distributed dims.");
-    int64_t globalWorkgroupSize = globalWorkgroupSizes[idx];
-    Value threadId =
-        rewriter.create<gpu::ThreadIdOp>(loc, indexType, gpuDims[idx]);
-    threadOps.push_back(threadId);
-    idx++;
     if (cstWgSize) {
       assert(*cstWgSize <= globalWorkgroupSize && "workgroup size overflow");
       if (*cstWgSize == globalWorkgroupSize) continue;
@@ -163,7 +164,7 @@ static LogicalResult rewriteForeachThreadToGpu(
   // Step 6. Erase old op.
   rewriter.eraseOp(foreachThreadOp);
 
-  return success();
+  return *maybeWorkgroupSizes;
 }
 
 namespace {

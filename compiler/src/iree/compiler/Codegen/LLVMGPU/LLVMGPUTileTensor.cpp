@@ -181,19 +181,20 @@ static LogicalResult tileParallelDims(
     auto interfaceOp = cast<PartitionableLoopsInterface>(*op);
     auto partitionedLoops =
         interfaceOp.getPartitionableLoops(kNumMaxParallelDims);
-    SmallVector<OpFoldResult> numThreads(numLoops, rewriter.getIndexAttr(1));
+    SmallVector<OpFoldResult> numThreads(numLoops, rewriter.getIndexAttr(0));
     int64_t id = 0;
-    int64_t dispatchId = 0;
-    SmallVector<int64_t> idDims(numLoops, -1);
+    int64_t threadId = 0;
+    SmallVector<int64_t> idDims;
     for (unsigned loop : llvm::reverse(partitionedLoops)) {
       int64_t num = elementPerWorkgroup[id++];
-      numThreads[loop] = rewriter.getIndexAttr(num);
-      if (num > 1) idDims[loop] = dispatchId++;
+      if (num > 1) {
+        numThreads[loop] = rewriter.getIndexAttr(num);
+        idDims.push_back(threadId++);
+      }
     }
-    for (int64_t &id : idDims) {
-      if (id == -1) id = dispatchId++;
-    }
-
+    std::reverse(idDims.begin(), idDims.end());
+    for(int64_t i = threadId; i < 3; i++)
+      idDims.push_back(i);
     auto tilingResult = linalg::tileToForeachThreadOp(
         rewriter, tilingOp, numThreads, idDims);
     rewriter.replaceOp(op, tilingResult->tileOp->getResults());
