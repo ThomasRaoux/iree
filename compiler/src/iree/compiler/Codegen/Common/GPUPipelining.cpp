@@ -60,12 +60,12 @@ static void getPipelineStages(scf::ForOp forOp,
   // stage `maxDepth`. In order to have a correct scheduling even with back
   // edges we order stages in decreasing order.
   for (Operation& op : forOp.getBody()->getOperations()) {
+    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
+  } 
+  for (Operation& op : forOp.getBody()->getOperations()) {
     if (!loadDep.count(&op) && !ldMatrixDep.count(&op) &&
         !isa<scf::YieldOp>(op))
       ops.push_back(std::make_pair(&op, depth));
-  }
-  for (Operation& op : forOp.getBody()->getOperations()) {
-    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
   }
   for (Operation& op : forOp.getBody()->getOperations()) {
     if (ldMatrixDep.count(&op) && !loadDep.count(&op))
@@ -110,7 +110,8 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
       OpBuilder builder(forOp.getContext());
       SmallVector<Operation*> barriers;
       bool waitFound = false;
-      int ldmatrixCounter = 0;
+      int ldmatrixCounter = 0;           // OperandA
+      int ldmatrixTransposeCounter = 0;  // OperandB
       for (Operation& op : forOp.getBody()->getOperations()) {
         // Pipeline the most inner for op that should be a flat region.
         if (op.getNumRegions() > 0) return;
@@ -132,11 +133,23 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
           barriers.clear();
           continue;
         }
-        if (isa<nvgpu::LdMatrixOp, nvgpu::DeviceAsyncWaitOp>(op)) {
+        if (isa<nvgpu::DeviceAsyncWaitOp>(op)) {
           waitFound = true;
-          if(ldmatrixCounter < 8)
+          op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
+        }
+        if (isa<nvgpu::LdMatrixOp>(op)) {
+
+          auto ldMatrixOp = cast<nvgpu::LdMatrixOp>(op);
+
+          if (ldMatrixOp.getTranspose() && ldmatrixTransposeCounter < 4) {
             op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
-          ldmatrixCounter++;  
+            ldmatrixTransposeCounter++;
+          }
+          
+          else if (ldmatrixCounter < 4) {
+            op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
+            ldmatrixCounter++;
+          }
         }
         auto ld = dyn_cast<vector::TransferReadOp>(op);
         if (!ld) continue;
@@ -157,7 +170,8 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
       }
     });
     scf::PipeliningOption options;
-    unsigned maxDepth = depth;
+
+    unsigned maxDepth = depth; 
     auto getSchedule = [maxDepth](
                            scf::ForOp forOp,
                            std::vector<std::pair<Operation*, unsigned>>& ops) {
@@ -179,7 +193,7 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
     
     // Rearrange ldmatrix closer to the mma.sync
     // std::cout << "GPUPipeline post processing " << std::endl;
-#if 1
+#if 0
     funcOp.walk([](scf::ForOp forOp) {
       llvm::SmallDenseSet<Operation*, 32> ldMatrixOpSet;
       for (Operation& op : forOp.getBody()->getOperations()) {
@@ -187,14 +201,14 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
           ldMatrixOpSet.insert(&op);
         }
         else {
-          
-          // auto mmaOp = dyn_cast<nvgpu::MmaSyncOp>(op);
+
           for (auto operand : op.getOperands()) {
             Operation* defOp = operand.getDefiningOp();
             if (ldMatrixOpSet.contains(defOp)) {
-              // if the defining operation is present in ldMatrixOpSet move it just above mmaOp
+              // if the defining operation is present in ldMatrixOpSet move 
+              // it just above its use.
               defOp->moveBefore(&op);
-              // only move each ldmatrix once, just before its first mmaOp use
+              // only move each ldmatrix once, just before its first use.
               ldMatrixOpSet.erase(defOp);
             }
           }
