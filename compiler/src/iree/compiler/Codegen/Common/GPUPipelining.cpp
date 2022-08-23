@@ -81,16 +81,16 @@ static void setAsyncAnnotations(Operation* op,
   if (!waitOp || waitOp.getNumGroups()) return;
   int numGroupInFlight = 0;
   if (part == scf::PipeliningOption::PipelinerPart::Kernel) {
-    numGroupInFlight = depth - 1;
+    numGroupInFlight = depth - 2;
   } else {
     // By construction there should be no wait op in the prologue as all the
     // wait should be in the last stage.
     if(part == scf::PipeliningOption::PipelinerPart::Prologue) {
-        numGroupInFlight = depth - 1;
+        numGroupInFlight = depth - 2;
     } else {
     // Based on the schedule we pick we know how many groups are in flight for
     // each iteration of the epilogue.
-    numGroupInFlight = depth - 1 - iteration;
+    numGroupInFlight = depth - 2 - iteration;
     }
   }
   OpBuilder b(op);
@@ -175,7 +175,7 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
     auto getSchedule = [maxDepth](
                            scf::ForOp forOp,
                            std::vector<std::pair<Operation*, unsigned>>& ops) {
-      return getPipelineStages(forOp, ops, maxDepth);
+      return getPipelineStages(forOp, ops, maxDepth - 1);
     };
     auto setAnnotation = [maxDepth](Operation* op,
                                     scf::PipeliningOption::PipelinerPart part,
