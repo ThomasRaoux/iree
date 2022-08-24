@@ -90,7 +90,7 @@ static void setAsyncAnnotations(Operation* op,
     } else {
     // Based on the schedule we pick we know how many groups are in flight for
     // each iteration of the epilogue.
-    numGroupInFlight = depth - 2 - iteration;
+    numGroupInFlight = depth - 3 - iteration;
     }
   }
   OpBuilder b(op);
