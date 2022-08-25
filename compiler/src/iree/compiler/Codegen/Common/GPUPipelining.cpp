@@ -9,7 +9,6 @@
 #include "iree/compiler/Codegen/Utils/Utils.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
 #include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -111,16 +110,16 @@ static Operation* replaceAsyncCopywithAsyncCopyZfill(Operation* op, Value pred, 
 
   // create srcElement Value based on the pred
   // srcElement = (pred) ?  dstElements : 0;
-
+ // asyncCopyOp.getDstElements().getZExtValue()
   Value dstElements = 
-      rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI32Type(), 
-        asyncCopyOp.getDstElements());
+      rewriter.create<arith::ConstantOp>(loc, asyncCopyOp.getDstElements(), 
+                            rewriter.getIndexType());
 
-  Value c0I32 =
-      rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI32Type(), 
-        rewriter.getI32IntegerAttr(0));
+  Value c0Index =
+      rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexType(),
+                              rewriter.getZeroAttr(rewriter.getIndexType()));
 
-  auto srcElements = rewriter.create<arith::SelectOp>(loc, pred, dstElements, c0I32);
+  auto srcElements = rewriter.create<arith::SelectOp>(loc, pred, dstElements, c0Index);
 
   auto asyncCopyZfillOp = rewriter.create<nvgpu::DeviceAsyncCopyOp>(
           loc,
