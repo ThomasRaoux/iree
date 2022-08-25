@@ -7,7 +7,9 @@
 #include "iree/compiler/Codegen/PassDetail.h"
 #include "iree/compiler/Codegen/Passes.h"
 #include "iree/compiler/Codegen/Utils/Utils.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
 #include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -98,6 +100,43 @@ static void setAsyncAnnotations(Operation* op,
                   b.getI32IntegerAttr(numGroupInFlight));
 }
 
+// Returns a new AsyncCopyOp with Zfill 
+static Operation* replaceAsyncCopywithAsyncCopyZfill(Operation* op, Value pred, PatternRewriter& rewriter) {
+
+  if (!isa<nvgpu::DeviceAsyncCopyOp>(op)) return op;
+
+  // replace mainloop AsyncCopy with AsyncCopy(zfill) inline asm.
+  auto asyncCopyOp = dyn_cast<nvgpu::DeviceAsyncCopyOp>(op);
+  auto loc = asyncCopyOp->getLoc();
+
+  // create srcElement Value based on the pred
+  // srcElement = (pred) ?  dstElements : 0;
+
+  Value dstElements = 
+      rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI32Type(), 
+        asyncCopyOp.getDstElements());
+
+  Value c0I32 =
+      rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI32Type(), 
+        rewriter.getI32IntegerAttr(0));
+
+  auto srcElements = rewriter.create<arith::SelectOp>(loc, pred, dstElements, c0I32);
+
+  auto asyncCopyZfillOp = rewriter.create<nvgpu::DeviceAsyncCopyOp>(
+          loc,
+          nvgpu::DeviceAsyncTokenType::get(asyncCopyOp.getContext()),
+          asyncCopyOp.getDst(), asyncCopyOp.getDstIndices(), 
+          asyncCopyOp.getSrc(), asyncCopyOp.getSrcIndices(),
+          asyncCopyOp.getDstElements(),
+          srcElements,
+          UnitAttr());
+  
+  rewriter.eraseOp(asyncCopyOp);
+
+  // return the newly create AsyncCopyZfillOp
+  return asyncCopyZfillOp;
+}
+
 namespace {
 struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
   GPUPipeliningPass(unsigned depth) : depth(depth) {}
@@ -184,6 +223,13 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
     };
     options.getScheduleFn = getSchedule;
     options.annotateFn = setAnnotation;
+
+    // Turn on/off epilogue peeling
+    options.peelEpilogue = false;
+    options.predicateFn = [](Operation* op, Value pred, PatternRewriter& rewriter) {
+      return replaceAsyncCopywithAsyncCopyZfill(op, pred, rewriter);
+    };
+
     RewritePatternSet pipeliningPatterns(context);
     scf::populateSCFLoopPipeliningPatterns(pipeliningPatterns, options);
     if (failed(applyPatternsAndFoldGreedily(funcOp,
