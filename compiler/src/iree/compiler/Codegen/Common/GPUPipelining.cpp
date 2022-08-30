@@ -59,20 +59,20 @@ static void getPipelineStages(scf::ForOp forOp,
   // Create a modulo schedule with loads from global memory and the operations
   // it depends on in stage 0. Store to shared memory and computation are in
   // stage `maxDepth`. In order to have a correct scheduling even with back
-  // edges we order stages in decreasing order.
+  // edges we order stages in decreasing order. 
   for (Operation& op : forOp.getBody()->getOperations()) {
     if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
   } 
   for (Operation& op : forOp.getBody()->getOperations()) {
     if (!loadDep.count(&op) && !ldMatrixDep.count(&op) &&
-        !isa<scf::YieldOp>(op))
+        !isa<scf::YieldOp>(op)) {
       ops.push_back(std::make_pair(&op, depth));
+    }
   }
   for (Operation& op : forOp.getBody()->getOperations()) {
     if (ldMatrixDep.count(&op) && !loadDep.count(&op))
       ops.push_back(std::make_pair(&op, depth - 1));
   }
-
 }
 
 static void setAsyncAnnotations(Operation* op,
@@ -112,12 +112,10 @@ static Operation* replaceAsyncCopywithAsyncCopyZfill(Operation* op, Value pred, 
   // srcElement = (pred) ?  dstElements : 0;
  // asyncCopyOp.getDstElements().getZExtValue()
   Value dstElements = 
-      rewriter.create<arith::ConstantOp>(loc, asyncCopyOp.getDstElements(), 
-                            rewriter.getIndexType());
+      rewriter.create<arith::ConstantOp>(loc, asyncCopyOp.getDstElementsAttr());
 
   Value c0Index =
-      rewriter.create<arith::ConstantOp>(loc, rewriter.getIndexType(),
-                              rewriter.getZeroAttr(rewriter.getIndexType()));
+      rewriter.create<arith::ConstantIndexOp>(loc, 0);
 
   auto srcElements = rewriter.create<arith::SelectOp>(loc, pred, dstElements, c0Index);
 
