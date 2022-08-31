@@ -45,32 +45,57 @@ static void getPipelineStages(scf::ForOp forOp,
   if (!forOp->hasAttr(kPipeliningLoopMarker)) return;
 
   // Track dependencies of the global memory load.
-  llvm::SmallDenseSet<Operation*> loadDep;
+  llvm::SmallDenseSet<Operation*> asyncCopyDep;
   llvm::SmallDenseSet<Operation*> ldMatrixDep;
+
+  // Count asyncCopyOp, ldMatrixOp, and mmaSyncOp
+  int numAsyncCopyOp{0}, numLdMatrixOp{0}, numMmmaSyncOp{0};
+
   for (Operation& op : forOp.getBody()->getOperations()) {
+    
+    if (isa<nvgpu::DeviceAsyncCopyOp>(op)) numAsyncCopyOp++;
+    else if (isa<nvgpu::LdMatrixOp>(op)) numLdMatrixOp++;
+    else if (isa<nvgpu::MmaSyncOp>(op)) numMmmaSyncOp++;
+
     if (op.hasAttr(kPipeliningGlobalLoad)) {
-      addDepOps(loadDep, &op, forOp.getBody());
+      addDepOps(asyncCopyDep, &op, forOp.getBody());
     }
     if (op.hasAttr(kPipeliningLdmatrix)) {
       addDepOps(ldMatrixDep, &op, forOp.getBody());
     }
   }
-  
+
+#if 0 // Check the instruction mix of the mainloop
+  std::cout << "nvgpu::DeviceAsyncCopyOp : " << numAsyncCopyOp << std::endl
+            << "nvgpu::LdMatrixOp        : " << numLdMatrixOp << std::endl
+            << "nvgpu::MmaSyncOp         : " << numMmmaSyncOp << std::endl;
+#endif
+
   // Create a modulo schedule with loads from global memory and the operations
   // it depends on in stage 0. Store to shared memory and computation are in
   // stage `maxDepth`. In order to have a correct scheduling even with back
   // edges we order stages in decreasing order. 
+  
+  
+  // Course-grained scheduling software pipelines global-to-shared copy (async_copy), 
+  // shared-to-register loads (ldmatrix), and math on register operands (mma.sync)
+  
+  // Schedule async_copy (x16)
   for (Operation& op : forOp.getBody()->getOperations()) {
-    if (loadDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
+    if (asyncCopyDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
   } 
+
+  // Schedule mma.sync (x128) + ldmatrix (x24)
   for (Operation& op : forOp.getBody()->getOperations()) {
-    if (!loadDep.count(&op) && !ldMatrixDep.count(&op) &&
+    if (!asyncCopyDep.count(&op) && !ldMatrixDep.count(&op) &&
         !isa<scf::YieldOp>(op)) {
       ops.push_back(std::make_pair(&op, depth));
     }
   }
+
+  // Schedule async_cp_wait 2, barrier.sync 0, and ldmatrix (x8)
   for (Operation& op : forOp.getBody()->getOperations()) {
-    if (ldMatrixDep.count(&op) && !loadDep.count(&op))
+    if (ldMatrixDep.count(&op) && !asyncCopyDep.count(&op))
       ops.push_back(std::make_pair(&op, depth - 1));
   }
 }
