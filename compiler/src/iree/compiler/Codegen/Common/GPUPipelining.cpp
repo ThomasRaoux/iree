@@ -37,6 +37,55 @@ static void addDepOps(llvm::SmallDenseSet<Operation*>& dep, Operation* op,
   }
 }
 
+/// Helper to move operations before a specific Op to achive better schedule. 
+static void moveOperationsBefore(
+  Operation* movingOp, 
+  std::vector<Operation*>& userOps, 
+  Operation* beforeOp)
+{
+  
+  // Move op 
+  movingOp->moveBefore(beforeOp);
+
+  // Move all the extract uses on ldsm op
+  for (auto &op : userOps) {
+    op->moveBefore(beforeOp);
+  }
+}
+
+static void traverseDefChainUtilSharedMemoryLoad(
+  Operation* op, llvm::SetVector<Operation*>& opSeq,
+  Block* block) {
+  
+  if (!op) return;
+  
+  if (isa<nvgpu::LdMatrixOp>(op)) {
+    if (op->getBlock() == block) opSeq.insert(op);
+    return;
+  }
+
+  // Recurse upwards towards the definition until a load is found.
+  // Assumption here is that only single operand operations are leading up to LdMatrix.
+  Operation* defOp = op->getOperand(0).getDefiningOp();
+    
+  traverseDefChainUtilSharedMemoryLoad(defOp, opSeq, block);
+}
+
+/// Helper function to backtrack from MmaSyncOp and populate instructions uptil LdMatrixOp
+/// feeding into Lhs and Rhs
+static void getMmaSyncLoadSequence(
+  nvgpu::MmaSyncOp mmaOp, 
+  llvm::SetVector<Operation*>& lhsSeq, // Operations feeding into mmaOp lhs operandA registers
+  llvm::SetVector<Operation*>& rhsSeq  // Operations feeding into mmaOp rhs operandB registers
+  ) {
+
+  Operation* lhs = mmaOp->getOperand(0).getDefiningOp();
+  traverseDefChainUtilSharedMemoryLoad(lhs, lhsSeq, mmaOp->getBlock());
+  
+  Operation* rhs = mmaOp->getOperand(1).getDefiningOp();
+  traverseDefChainUtilSharedMemoryLoad(rhs, rhsSeq, mmaOp->getBlock());
+}
+
 /// Assign stages to the loop ops. Simple logic for now, put load from global
 /// memory in stage 0 and the rest in stage 1.
 static void getPipelineStages(scf::ForOp forOp,
@@ -79,11 +128,6 @@ static void getPipelineStages(scf::ForOp forOp,
   
   // Course-grained scheduling software pipelines global-to-shared copy (async_copy), 
   // shared-to-register loads (ldmatrix), and math on register operands (mma.sync)
-  
-  // Schedule async_copy (x16)
-  for (Operation& op : forOp.getBody()->getOperations()) {
-    if (asyncCopyDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
-  } 
 
   // Schedule mma.sync (x128) + ldmatrix (x24)
   for (Operation& op : forOp.getBody()->getOperations()) {
@@ -92,6 +136,11 @@ static void getPipelineStages(scf::ForOp forOp,
       ops.push_back(std::make_pair(&op, depth));
     }
   }
+
+  // Schedule async_copy (x16)
+  for (Operation& op : forOp.getBody()->getOperations()) {
+    if (asyncCopyDep.count(&op)) ops.push_back(std::make_pair(&op, 0));
+  } 
 
   // Schedule async_cp_wait 2, barrier.sync 0, and ldmatrix (x8)
   for (Operation& op : forOp.getBody()->getOperations()) {
@@ -159,8 +208,20 @@ static Operation* replaceAsyncCopywithAsyncCopyZfill(Operation* op, Value pred, 
   return asyncCopyZfillOp;
 }
 
+struct KgroupOperations {
+  llvm::SetVector<Operation*> ldMatrixLhsOps; // OperandA ldmatrixOps
+  llvm::SetVector<Operation*> ldMatrixRhsOps; // OperandB ldmatrixOps
+  llvm::SetVector<Operation*> mmaSyncOps;     // mmaSyncOps 
+};
+
+
 namespace {
 struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
+  
+  // Obtain using static tile sizes and instructions shapes
+  static int const numLdMatrixOpPerOperandPerKblock = 4;
+  static int const numMmaOpsPerKblock = 32;
+
   GPUPipeliningPass(unsigned depth) : depth(depth) {}
   void runOnOperation() override {
     auto funcOp = getOperation();
@@ -171,8 +232,34 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
       OpBuilder builder(forOp.getContext());
       SmallVector<Operation*> barriers;
       bool waitFound = false;
-      int ldmatrixCounter = 0;           // OperandA
-      int ldmatrixTransposeCounter = 0;  // OperandB
+      //int ldmatrixCounter = 0;           // OperandA
+      //int ldmatrixTransposeCounter = 0;  // OperandB
+
+
+      // Pipeline LdsmOp for kgroup = 0 (first 32 mmaOps)
+      llvm::SetVector<Operation*> lhsLdsmSeqKgroup0, rhsLdsmSeqKgroup0;
+      int numMmaOp = 0;
+      for (Operation& op : forOp.getBody()->getOperations()) {
+        if (auto mmaOp = dyn_cast<nvgpu::MmaSyncOp>(op)) {
+          numMmaOp++;
+          if (numMmaOp == 32) break;
+          getMmaSyncLoadSequence(mmaOp, lhsLdsmSeqKgroup0, rhsLdsmSeqKgroup0);
+        }
+      }
+
+      // std::cout << "Lhs Seq " << std::endl;
+      for (auto op : lhsLdsmSeqKgroup0) {
+        //op->dump();
+        op->setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
+      }
+
+      // std::cout << "Rhs Seq " << std::endl;
+      for (auto op : rhsLdsmSeqKgroup0) {
+        //op->dump();
+        op->setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
+      }
+
+      // Pipeline AsyncCopyOp
       for (Operation& op : forOp.getBody()->getOperations()) {
         // Pipeline the most inner for op that should be a flat region.
         if (op.getNumRegions() > 0) return;
@@ -198,6 +285,9 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
           waitFound = true;
           op.setAttr(kPipeliningLdmatrix, builder.getUnitAttr());
         }
+
+#if 0 // DO NOT USE this part
+      // Use kgroup tracking for kgroup = 0 to pipeline ldsm
         if (isa<nvgpu::LdMatrixOp>(op)) {
 
           auto ldMatrixOp = cast<nvgpu::LdMatrixOp>(op);
@@ -212,6 +302,7 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
             ldmatrixCounter++;
           }
         }
+#endif
         auto ld = dyn_cast<vector::TransferReadOp>(op);
         if (!ld) continue;
         unsigned ldAddSpace =
@@ -258,33 +349,102 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
                                             std::move(pipeliningPatterns)))) {
       return signalPassFailure();
     }
-    
-    // Rearrange ldmatrix closer to the mma.sync
-    // std::cout << "GPUPipeline post processing " << std::endl;
-#if 0
-    funcOp.walk([](scf::ForOp forOp) {
-      llvm::SmallDenseSet<Operation*, 32> ldMatrixOpSet;
-      for (Operation& op : forOp.getBody()->getOperations()) {
-        if (isa<nvgpu::LdMatrixOp>(op)) {
-          ldMatrixOpSet.insert(&op);
-        }
-        else {
 
-          for (auto operand : op.getOperands()) {
-            Operation* defOp = operand.getDefiningOp();
-            if (ldMatrixOpSet.contains(defOp)) {
-              // if the defining operation is present in ldMatrixOpSet move 
-              // it just above its use.
-              defOp->moveBefore(&op);
-              // only move each ldmatrix once, just before its first use.
-              ldMatrixOpSet.erase(defOp);
-            }
+    // Post-processing fine-grained scheduling.
+    // Interleaving ldmatrix and mma.sync
+    funcOp.walk([](scf::ForOp forOp) {
+
+      
+    llvm::SetVector<Operation*> ldMatrixLhsOps;
+    llvm::SetVector<Operation*> ldMatrixRhsOps; 
+    llvm::SetVector<Operation*> mmaSyncOps; 
+    Operation* beforeOp;
+    
+    std::vector<KgroupOperations> kgroupOperations;
+
+    int numMmaOp = 0;
+    int kgroup = 0;
+    kgroupOperations.push_back(KgroupOperations());
+
+    for (Operation& op : forOp.getBody()->getOperations()) {
+      if (auto mmaOp = dyn_cast<nvgpu::MmaSyncOp>(op)) {
+        numMmaOp++;
+        kgroupOperations[kgroup].mmaSyncOps.insert(&op);
+        getMmaSyncLoadSequence(mmaOp, kgroupOperations[kgroup].ldMatrixLhsOps, kgroupOperations[kgroup].ldMatrixRhsOps);
+      }
+
+      if (numMmaOp == numMmaOpsPerKblock) { // collected mmaSyncOp for one kgroup
+
+        kgroupOperations.push_back(KgroupOperations());
+        //std::cout << kgroupOperations[kgroup].mmaSyncOps.size() << std::endl;
+        //std::cout << kgroupOperations[kgroup].ldMatrixLhsOps.size() << std::endl;
+        //std::cout << kgroupOperations[kgroup].ldMatrixRhsOps.size() << std::endl;
+
+        // Reset for the next kgroup
+        numMmaOp = 0;
+        kgroup++;
+
+      }
+
+      if (isa<nvgpu::DeviceAsyncWaitOp>(op)) {
+        beforeOp = &op; 
+        break;
+      }
+    }
+
+    // Schedule kgroupOperations[0, 1, ..., ]
+    int totalKgroups = kgroupOperations.size();
+    for (int kgroup = 0; kgroup < totalKgroups - 1; kgroup++) {
+
+      // Move loads for OperandA
+      for (auto op : kgroupOperations[kgroup + 1].ldMatrixLhsOps) {
+        
+        std::vector<Operation*> userOps;
+        for (Operation *userOp : op->getUsers()) {
+          if (isa<vector::ExtractStridedSliceOp>(userOp)) {
+            userOps.push_back(userOp);
           }
         }
+        moveOperationsBefore(op, userOps, beforeOp);
       }
-      // std::cout << "unmoved nvgpu.ldmatrix instructions " << ldMatrixOpSet.size() << std::endl;
+
+      // Move loads for OperandB
+      for (auto op : kgroupOperations[kgroup + 1].ldMatrixRhsOps) {
+        
+        std::vector<Operation*> userOps;
+        for (Operation *userOp : op->getUsers()) {
+          if (isa<vector::ExtractStridedSliceOp>(userOp)) {
+            userOps.push_back(userOp);
+          }
+        }
+        moveOperationsBefore(op, userOps, beforeOp);
+      }
+
+      // Move math ops
+      for (auto op : kgroupOperations[kgroup].mmaSyncOps) {
+        std::vector<Operation*> userOps;
+        for (Operation *userOp : op->getUsers()) {
+          if (isa<vector::InsertStridedSliceOp>(userOp)) {
+            userOps.push_back(userOp);
+          }
+        }
+        moveOperationsBefore(op, userOps, beforeOp);
+      }
+    }
+
+    // Move math ops (last mma.sync op)
+    for (auto op : kgroupOperations[totalKgroups - 1].mmaSyncOps) {
+      std::vector<Operation*> userOps;
+      for (Operation *userOp : op->getUsers()) {
+        if (isa<vector::InsertStridedSliceOp>(userOp)) {
+          userOps.push_back(userOp);
+        }
+      }
+      moveOperationsBefore(op, userOps, beforeOp);
+    }
+
     });
-#endif
+
   }
 
  private:
