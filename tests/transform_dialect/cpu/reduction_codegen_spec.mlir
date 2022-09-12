@@ -5,9 +5,6 @@
 transform.structured.canonicalized_sequence failures(propagate) {
 ^bb1(%variant_op: !pdl.operation):
   %fill = transform.structured.match ops{["linalg.fill"]} in %variant_op
-
-  // Split the reduction by 2 to obtain a more meaty parallel op with
-  // parallelism across size(reduction) / 2 threads.
   %generic = transform.structured.match ops{["linalg.generic"]} in %variant_op
 
   // First level of tiling + fusion parallelizes to blocks.
