@@ -26,6 +26,7 @@ iree_cc_library(
   HDRS
     "LLVMGPUExtensions.h"
     "LLVMGPUExtensionsOps.h.inc"
+    "LLVMGPUTransformIR.h"
   SRCS
     "LLVMGPUExtensions.cpp"
     "LLVMGPUExtensionsOps.cpp.inc"

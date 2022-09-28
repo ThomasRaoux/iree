@@ -116,13 +116,15 @@ class TransformDialectInterpreterPass
   }
 
   LogicalResult initialize(MLIRContext *context) override {
-    OwningOpRef<ModuleOp> module;
-    if (failed(transform::parseTransformModuleFromFile(
-            context, transformFileName, module)))
-      return failure();
+    if (transformFileName.hasValue() && !transformFileName.empty()) {
+      OwningOpRef<ModuleOp> module;
+      if (failed(transform::parseTransformModuleFromFile(
+              context, transformFileName, module)))
+        return failure();
 
-    sharedTransformModule =
-        std::make_shared<OwningOpRef<ModuleOp>>(std::move(module));
+      sharedTransformModule =
+          std::make_shared<OwningOpRef<ModuleOp>>(std::move(module));
+    }
     return success();
   }
 

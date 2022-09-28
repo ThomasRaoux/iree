@@ -56,6 +56,7 @@ iree_compiler_cc_library(
     hdrs = [
         "LLVMGPUExtensions.h",
         "LLVMGPUExtensionsOps.h.inc",
+        "LLVMGPUTransformIR.h",
     ],
     deps = [
         ":LLVMGPUExtensionsOpGen",

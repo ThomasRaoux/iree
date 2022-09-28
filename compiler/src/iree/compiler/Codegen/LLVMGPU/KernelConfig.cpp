@@ -12,6 +12,7 @@
 #include "iree/compiler/Codegen/Common/LinalgOpInfo.h"
 #include "iree/compiler/Codegen/Common/UserConfig.h"
 #include "iree/compiler/Codegen/Dialect/LoweringConfig.h"
+#include "iree/compiler/Codegen/LLVMGPU/TransformExtensions/LLVMGPUTransformIR.h"
 #include "iree/compiler/Codegen/LLVMGPU/TransposeUtils.h"
 #include "iree/compiler/Dialect/Flow/IR/FlowOps.h"
 #include "llvm/Support/CommandLine.h"
@@ -22,6 +23,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
+#include "mlir/Parser/Parser.h"
 
 using namespace mlir;
 using namespace mlir::iree_compiler;
@@ -649,6 +651,20 @@ static LogicalResult setConvolutionConfig(linalg::LinalgOp linalgOp,
                                                pipeline, workgroupSize);
 }
 
+static LogicalResult setTransformPipelineConfig(func::FuncOp funcOp) {
+
+  // TODO: match softmax IR.
+  auto translationInfo = IREE::Codegen::TranslationInfoAttr::get(
+      funcOp.getContext(), IREE::Codegen::DispatchLoweringPassPipeline::
+                               TransformDialectInterpreterCodegen);
+  setTranslationInfo(funcOp, translationInfo);
+  auto m = mlir::parseSourceString<mlir::ModuleOp>(
+      mlir::iree::kSoftmaxTransformProgram, funcOp.getContext());
+  Operation &t = *m->getBody()->begin();
+  t.moveAfter(funcOp);
+  return success();
+}
+
 static LogicalResult setRootConfig(func::FuncOp entryPointFn,
                                    Operation *computeOp) {
   if (!clGPUCodegenTransformDialectTileSizes.empty()) {
@@ -718,6 +734,11 @@ LogicalResult initGPULaunchConfig(ModuleOp moduleOp) {
       if (clGPUCodegenTransformDialectTileSizes.empty()) continue;
     }
 
+    // If we find a case that will be processed by the transform dialect
+    // pipeline skip looking for a root.
+    if (succeeded(setTransformPipelineConfig(funcOp))) {
+      continue;
+    }
     Operation *rootOperation = nullptr;
     // Find the root operation. linalg.generic and linalg.fill are not root
     // operations if there are other compute operations present.
