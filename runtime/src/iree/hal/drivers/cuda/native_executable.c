@@ -33,6 +33,7 @@ typedef struct iree_hal_cuda_native_executable_t {
   iree_hal_pipeline_layout_t** pipeline_layouts;
   iree_host_size_t entry_count;
   CUmodule module;
+  int index;
   iree_hal_cuda_native_executable_function_t entry_functions[];
 } iree_hal_cuda_native_executable_t;
 
@@ -83,7 +84,9 @@ iree_status_t iree_hal_cuda_native_executable_create(
                                  &executable->resource);
     executable->module = module;
     executable->context = context;
-
+    static int count = 0; 
+    printf("map: index: %i name: %s\n", count, ptx_image);
+    executable->index = count++;
     executable->pipeline_layouts =
         (void*)((char*)executable + sizeof(*executable) +
                 entry_count *
@@ -171,6 +174,13 @@ iree_status_t iree_hal_cuda_native_executable_shared_memory_size(
   *shared_memory_size =
       executable->entry_functions[entry_point].shared_memory_size;
   return iree_ok_status();
+}
+
+int iree_hal_cuda_native_executable_get_index(
+    iree_hal_executable_t* base_executable) {
+  iree_hal_cuda_native_executable_t* executable =
+      iree_hal_cuda_native_executable_cast(base_executable);
+  return executable->index;
 }
 
 iree_hal_pipeline_layout_t* iree_hal_cuda_executable_get_layout(

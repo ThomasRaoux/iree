@@ -43,6 +43,9 @@ iree_status_t iree_hal_cuda_native_executable_shared_memory_size(
 iree_hal_pipeline_layout_t* iree_hal_cuda_executable_get_layout(
     iree_hal_executable_t* executable, int32_t entry_point);
 
+int iree_hal_cuda_native_executable_get_index(
+    iree_hal_executable_t* executable);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

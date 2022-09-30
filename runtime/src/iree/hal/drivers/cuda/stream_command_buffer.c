@@ -367,6 +367,8 @@ static iree_status_t iree_hal_cuda_stream_command_buffer_dispatch(
       executable, entry_point, &shared_memory_size));
   CUfunction func =
       iree_hal_cuda_native_executable_for_entry_point(executable, entry_point);
+  int index = iree_hal_cuda_native_executable_get_index(executable);
+  printf("index: %i\n\n", index);
   CUDA_RETURN_IF_ERROR(
       command_buffer->context->syms,
       cuLaunchKernel(func, workgroup_x, workgroup_y, workgroup_z, block_size_x,
