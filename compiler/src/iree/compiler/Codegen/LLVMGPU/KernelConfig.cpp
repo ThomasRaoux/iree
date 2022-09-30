@@ -395,13 +395,23 @@ static LogicalResult setRootDefaultConfig(func::FuncOp entryPoint,
     }
   }
 
+  bool hasBroadCastAfterReduction = false;
   auto linalgOp = dyn_cast<linalg::LinalgOp>(op);
+  if (linalgOp && linalgOp.getNumReductionLoops() > 0) {
+    for (Operation *user : linalgOp->getUsers()) {
+      if (auto linalgUser = dyn_cast<linalg::LinalgOp>(user)) {
+        if (linalgUser.getNumParallelLoops() > linalgOp.getNumParallelLoops()) {
+          hasBroadCastAfterReduction = true;
+        }
+      }
+    }
+  }
   // Pick a vectorSize of 1 for op that we know won't get vectorizedd.
   // Also skip vectorization for linalg on memref (no result) as the pipeline
   // relies on tensor level tiling.
   // TODO(thomasraoux): This could be improved by checking if the linalg op
   // would fail vectorization.
-  if (!linalgOp || op->getNumResults() != 1 ||
+  if (!linalgOp || op->getNumResults() != 1 || hasBroadCastAfterReduction ||
       llvm::any_of(linalgOp.getInputAndOutputOperands(), [&](OpOperand *input) {
         return !linalgOp.getTiedIndexingMap(input).isProjectedPermutation();
       })) {
