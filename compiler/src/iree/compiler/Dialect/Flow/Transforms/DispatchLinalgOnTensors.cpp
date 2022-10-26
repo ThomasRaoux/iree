@@ -981,7 +981,7 @@ static bool isFusableWithProducer(OpOperand &operand, bool aggressiveFusion) {
       SmallVector<unsigned> dims;
       linalgRoot.getReductionDims(dims);
       fuseUses = (dims.size() == 1 &&
-                  (linalgRoot.getStaticLoopRanges()[dims[0]] % 64 == 0) &&
+                  (linalgRoot.getStaticLoopRanges()[dims[0]] % (64 * 4) == 0) &&
                   (linalgRoot.getStaticLoopRanges()[dims[0]] <= 4096));
     }
     // Only fuse on inputs if both ops are generic ops.
