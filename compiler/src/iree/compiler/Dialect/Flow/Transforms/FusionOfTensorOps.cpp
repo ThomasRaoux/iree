@@ -15,6 +15,7 @@
 #include "iree/compiler/Dialect/Flow/Transforms/PassDetail.h"
 #include "iree/compiler/Dialect/Flow/Transforms/Passes.h"
 #include "llvm/Support/Debug.h"
+#include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
@@ -149,9 +150,21 @@ static bool hasReduction(Operation *op) {
   auto linalg = dyn_cast<linalg::GenericOp>(op);
   if (!linalg) return false;
   SmallVector<unsigned> dims;
+  if (linalg.getNumResults() != 1) return false;
+  // Only support single combiner operations for now.
+  SmallVector<Operation *, 4> combinerOps;
+  if (!matchReduction(linalg.getRegionOutputArgs(), 0, combinerOps) ||
+      combinerOps.size() != 1) {
+    return false;
+  }
+  const Type elementType =
+      linalg.getOutputs()[0].getType().cast<ShapedType>().getElementType();
+  if (!elementType.isIntOrFloat()) return false;
+  // Reduction distribution only supports 32-bit types now.
+  if (elementType.getIntOrFloatBitWidth() != 32) return false;
   linalg.getReductionDims(dims);
   return dims.size() == 1 &&
-         (linalg.getStaticLoopRanges()[dims[0]] % 64 == 0) &&
+         (linalg.getStaticLoopRanges()[dims[0]] % (64 * 4) == 0) &&
          (linalg.getStaticLoopRanges()[dims[0]] <= 4096);
 }
 
