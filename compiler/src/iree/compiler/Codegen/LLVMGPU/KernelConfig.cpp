@@ -478,7 +478,7 @@ static LogicalResult setWarpReductionConfig(func::FuncOp entryPoint,
   op.getReductionDims(reductionDims);
   if (reductionDims.size() != 1 || reductionDims[0] != op.getNumLoops() - 1)
     return failure();
-  if (op.getRegionOutputArgs().size() != 1) return failure();
+  //if (op.getRegionOutputArgs().size() != 1) return failure();
 
   // Only support projected permutation, this could be extended to projected
   // permutated with broadcast.
@@ -489,9 +489,9 @@ static LogicalResult setWarpReductionConfig(func::FuncOp entryPoint,
 
   // Only single combiner operations are supported for now.
   SmallVector<Operation *, 4> combinerOps;
-  if (!matchReduction(op.getRegionOutputArgs(), 0, combinerOps) ||
-      combinerOps.size() != 1)
-    return failure();
+//  if (!matchReduction(op.getRegionOutputArgs(), 0, combinerOps) ||
+//      combinerOps.size() != 1)
+//    return failure();
   Optional<int64_t> dimSize = getLinalgDimSize(op, reductionDims[0]);
   if (!dimSize || *dimSize % cudaWarpSize != 0) return failure();
 
@@ -518,7 +518,7 @@ static LogicalResult setWarpReductionConfig(func::FuncOp entryPoint,
     // the reduction with a consumer that needs to be tiled.
     // TODO(thomasraoux): remove the restriction once vector distribution is
     // improved.
-    if (isFusedWithBroadcast(entryPoint, op)) return failure();
+    //if (isFusedWithBroadcast(entryPoint, op)) return failure();
   }
   std::array<int64_t, 3> workgroupSize = {groupSize, 1, 1};
   SmallVector<unsigned> partitionedLoops =
