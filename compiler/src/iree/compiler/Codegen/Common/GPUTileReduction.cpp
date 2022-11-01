@@ -67,6 +67,22 @@ static LogicalResult tileReduction(linalg::GenericOp op) {
   return success();
 }
 
+static LogicalResult tileFusedOps(linalg::GenericOp op) {
+  // First split the reduction.
+  SimpleRewriter rewriter(op.getContext());
+  rewriter.setInsertionPoint(op);
+  SmallVector<int64_t> tileSizes = getTileSizes(op, 1);
+  if(tileSizes.empty())
+    return success();
+  linalg::LinalgTilingOptions tileOption;
+  tileOption.setTileSizes(tileSizes);
+  FailureOr<linalg::TiledLinalgOp> tiledOps =
+      linalg::tileLinalgOp(rewriter, op, tileOption);
+  if (failed(tiledOps)) return failure();
+  rewriter.replaceOp(op, tiledOps->tensorResults);
+  return success();
+}
+
 struct GPUTileReductionPass
     : public GPUTileReductionBase<GPUTileReductionPass> {
   void runOnOperation() override {
@@ -78,13 +94,18 @@ struct GPUTileReductionPass
         if (failed(tileReduction(op))) {
           return signalPassFailure();
         }
+      } else {
+        if (failed(tileFusedOps(op))) {
+          return signalPassFailure();
+        }
       }
     }
   }
 };
 }  // namespace
 
-std::unique_ptr<OperationPass<func::FuncOp>> createGPUTileReductionPass() {
+std::unique_ptr<OperationPass<func::FuncOp>>
+createGPUTileReductionPass() {
   return std::make_unique<GPUTileReductionPass>();
 }
 

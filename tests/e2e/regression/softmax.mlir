@@ -50,7 +50,7 @@ func.func @softmax() {
   } -> tensor<12x40960xf32>
   %10 = linalg.generic {indexing_maps = [affine_map<(d0, d1, d2) -> (d0, d1, d2)>, affine_map<(d0, d1, d2) -> (d0, d1)>, affine_map<(d0, d1, d2) -> (d0, d1, d2)>], iterator_types = ["parallel", "parallel", "parallel"]} ins(%6, %9 : tensor<12x40960x40960xf32>, tensor<12x40960xf32>) outs(%4 : tensor<12x40960x40960xf32>) {
   ^bb0(%arg0: f32, %arg1: f32, %arg2: f32):
-    %11 = arith.mulf %arg0, %arg1 : f32
+    %11 = arith.mulf %arg1, %arg1 : f32
     linalg.yield %11 : f32
   } -> tensor<12x40960x40960xf32>
   check.expect_almost_eq(%10, %cst_2) : tensor<12x40960x40960xf32>
