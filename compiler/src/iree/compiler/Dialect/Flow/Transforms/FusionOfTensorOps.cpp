@@ -164,8 +164,7 @@ static bool hasReduction(Operation *op) {
   if (elementType.getIntOrFloatBitWidth() != 32) return false;
   linalg.getReductionDims(dims);
   return dims.size() == 1 &&
-         (linalg.getStaticLoopRanges()[dims[0]] % (64 * 4) == 0) &&
-         (linalg.getStaticLoopRanges()[dims[0]] <= 4096);
+         (linalg.getStaticLoopRanges()[dims[0]] % (64 * 4) == 0);
 }
 
 static FailureOr<unsigned> fuseMultiUseProducers(Operation *funcOp,
