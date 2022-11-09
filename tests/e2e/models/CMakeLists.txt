@@ -62,26 +62,4 @@ iree_check_single_backend_test_suite(
     900
 )
 
-iree_check_single_backend_test_suite(
-  NAME
-    check_cuda_cuda
-  SRCS
-    "bert_encoder_unrolled_fake_weights.mlir"
-    "mobilenetv3_fake_weights.mlir"
-  TARGET_BACKEND
-    "cuda"
-  DRIVER
-    "cuda"
-  COMPILER_FLAGS
-    "--iree-input-type=mhlo"
-  LABELS
-    "noasan"
-    "nomsan"
-    "notsan"
-    "noubsan"
-    "requires-gpu-nvidia"
-  TIMEOUT
-    900
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

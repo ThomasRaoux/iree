@@ -24,6 +24,7 @@ class MatrixElemTypeId(enum.Enum):
   I8 = "i8"
   I32 = "i32"
   F32 = "f32"
+  F16 = "f16"
 
 
 # Enumerates of the collections of shapes that we can generate tests for.
@@ -178,7 +179,7 @@ def get_test_compilation_infos(
     ]
   elif compilation_info_id == CompilationInfoId.LLVMGPUMatmulTensorCore:
     tile_workgroup_size_pairs = [
-        TileWorkgroupSizePair([32, 32, 16], [64, 2, 1]),
+        TileWorkgroupSizePair([128, 128, 64], [64, 2, 1]),
     ]
 
   compilation_infos = []
@@ -472,7 +473,7 @@ def parse_arguments():
                       required=True)
   parser.add_argument("--lhs_rhs_type",
                       type=str,
-                      choices=["i8", "f32"],
+                      choices=["i8", "f32", "f16"],
                       help="Numeric type of input matrices",
                       required=True)
   parser.add_argument("--shapes",

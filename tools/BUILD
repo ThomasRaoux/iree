@@ -195,6 +195,11 @@ cc_binary(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base:core_headers",
         "//runtime/src/iree/base:tracing",
+<<<<<<< HEAD
+=======
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:cpu",
+>>>>>>> 0a6cdf0d5... Add support for GEMM e2e Test For CUDA backend on F16 input (#10842)
         "//runtime/src/iree/base/internal:flags",
         "//runtime/src/iree/base/internal:path",
         "//runtime/src/iree/hal",
