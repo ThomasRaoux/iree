@@ -294,11 +294,7 @@ void transform_ext::makeReductionMatcher(
     transform_ext::StructuredOpMatcher &leading,
     transform_ext::StructuredOpMatcher &trailing) {
   fill = m_StructuredOp<linalg::FillOp>();
-  trailing = m_StructuredOp<linalg::GenericOp>()
-                 .input(AllOperands(), IsPermutation())
-                 .output(AllOperands(), IsPermutation())
-                 .input(NumEqualsTo(1))
-                 .output(NumEqualsTo(1));
+  trailing = m_StructuredOp<linalg::GenericOp>();
   leading = trailing;
   reduction = m_StructuredOp()
                   .dim(AllDims(), ShapeKind::Static)

@@ -40,7 +40,7 @@ llvm::cl::opt<std::string> clGPUCodegenTransformDialectFileName(
 llvm::cl::opt<bool> clGPUEnableTransformDialectJit(
     "iree-codegen-llvmgpu-enable-transform-dialect-jit",
     llvm::cl::desc("enable the usage of the transform dialect JIT"),
-    llvm::cl::init(false));
+    llvm::cl::init(true));
 
 llvm::cl::list<int64_t> clGPUCodegenTransformDialectTileSizes(
     "iree-codegen-llvmgpu-workgroup-tile-sizes",
@@ -498,6 +498,11 @@ static LogicalResult setReductionTransformJitConfig(
     const TargetInfo &targetInfo) {
   if (!clGPUEnableTransformDialectJit) return failure();
   if (!targetInfo.hasWarpShuffle) return failure();
+
+  // Workaround for marcher crashing on 0D linalg op, needs to be fixed before
+  // commit.
+  if (op.getNumReductionLoops() == 0) return failure();
+
   if (failed(matchAndSetGPUReductionTransformStrategy(entryPoint, op)))
     return failure();
 
