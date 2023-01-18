@@ -1174,6 +1174,7 @@ void transform_dialect::ApplyBufferOptimizationsOp::getEffects(
 void transform_dialect::ApplyBufferOptimizationsOp::build(
     OpBuilder &builder, OperationState &result, Value target) {
   result.addOperands(target);
+  result.addTypes({pdl::OperationType::get(target.getContext())});
 }
 
 #define GET_OP_CLASSES

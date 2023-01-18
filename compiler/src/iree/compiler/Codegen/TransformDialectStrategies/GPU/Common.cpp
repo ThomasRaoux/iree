@@ -153,7 +153,6 @@ Value mlir::iree_compiler::gpu::buildDistributeVectors(ImplicitLocOpBuilder &b,
   ApplyPatternsOpPatterns patterns;
   patterns.foldMemrefAliases = true;
   patterns.rankReducingVector = true;
-  patterns.rankReducingLinalg = true;
   funcH = b.create<ApplyPatternsOp>(funcH, patterns);
   Value ifH = b.create<MatchOp>(funcH, scf::IfOp::getOperationName());
   // Locally suppress failures for this op only because it doesn't cover the
