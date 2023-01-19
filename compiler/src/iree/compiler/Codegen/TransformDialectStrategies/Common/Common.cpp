@@ -23,6 +23,7 @@ using namespace mlir;
 #define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE "]: ")
 
 // TODO: significantly better namespacing.
+using iree_compiler::IREE::transform_dialect::ApplyBufferOptimizationsOp;
 using iree_compiler::IREE::transform_dialect::ApplyPatternsOp;
 using iree_compiler::IREE::transform_dialect::ApplyPatternsOpPatterns;
 using iree_compiler::IREE::transform_dialect::ForeachThreadToWorkgroupOp;
@@ -250,16 +251,12 @@ mlir::iree_compiler::
       b, rootH, opsHToFuse, tileSizes, threadDimMapping);
 }
 
-/// Apply patterns and vectorize (for now always applies rank-reduction).
+/// Apply patterns and vectorize.
 /// Takes a handle to a func.func and returns an updated handle to a
 /// func.func.
 // TODO: configure patterns.
 Value mlir::iree_compiler::buildVectorize(ImplicitLocOpBuilder &b,
                                           Value funcH) {
-  ApplyPatternsOpPatterns patterns;
-  patterns.rankReducingVector = true;
-  patterns.rankReducingLinalg = true;
-  funcH = b.create<ApplyPatternsOp>(funcH, patterns);
   return b.create<VectorizeOp>(funcH);
 }
 
@@ -374,9 +371,14 @@ mlir::iree_compiler::buildReductionStrategyBlockDistribution(
       unpackRegisteredMatchCallback<4>(
           b, "reduction", transform::FailurePropagationMode::Propagate,
           variantH);
+
+  iree_compiler::buildPrint(b, fillH);
+
   // Step 2. Create the block/mapping tiling level and fusee.
   auto [fusionTargetH, fusionGroupH] =
       buildSelectFirstNonEmpty(b, maybeTrailingH, reductionH);
+  iree_compiler::buildPrint(b, fillH);
+
   ArrayRef<Attribute> allBlocksRef(strategy.allBlockAttrs);
   TileToForeachThreadAndFuseAndDistributeResult tileResult =
       buildTileFuseDistToForeachThreadAndWorkgroupCountWithTileSizes(
@@ -388,7 +390,10 @@ mlir::iree_compiler::buildReductionStrategyBlockDistribution(
           /*threadDimMapping=*/
           b.getArrayAttr(
               allBlocksRef.take_front(strategy.captures.reductionRank - 1)));
+  iree_compiler::buildPrint(b, fillH);
   fillH = b.create<FuseIntoContainingOp>(fillH, tileResult.foreachThreadH);
+  iree_compiler::buildPrint(b, fillH);
+
   maybeLeadingH =
       b.create<FuseIntoContainingOp>(maybeLeadingH, tileResult.foreachThreadH);
   // Step 3. Normalize to reorder results irrespective of emptiness.
@@ -396,4 +401,13 @@ mlir::iree_compiler::buildReductionStrategyBlockDistribution(
       b, tileResult.resultingFusedOpsHandles.front(), tileResult.tiledOpH);
   return std::make_tuple(maybeLeadingH, fillH, blockReductionH,
                          maybeBlockTrailingH);
+}
+
+Value mlir::iree_compiler::buildMemoryOptimizations(ImplicitLocOpBuilder &b,
+                                                   Value funcH) {
+  ApplyPatternsOpPatterns patterns;
+  patterns.lowerTransferOpPermutations = true;
+  patterns.rankReducingVector = true;
+  funcH = b.create<ApplyPatternsOp>(funcH, patterns);
+  return b.create<ApplyBufferOptimizationsOp>(funcH);
 }

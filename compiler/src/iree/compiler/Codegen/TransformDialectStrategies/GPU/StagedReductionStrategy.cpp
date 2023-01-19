@@ -113,8 +113,9 @@ void mlir::iree_compiler::gpu::StagedReductionStrategy::configure(
 }
 
 static void buildStagedReductionStrategyThreadLevel(
-    ImplicitLocOpBuilder &b, Value gridReductionH, Value maybeTiledLeadingH,
-    Value maybeTiledTrailingH, const StagedReductionStrategy &strategy) {
+    ImplicitLocOpBuilder &b, Value gridReductionH, Value gridFillH,
+    Value maybeTiledLeadingH, Value maybeTiledTrailingH,
+    const StagedReductionStrategy &strategy) {
   // Map the potential maybeTiledLeadingH.
   // TODO: Consider fusing leading elementwise into threads.
   if (strategy.captures.maybeLeadingRank > 0) {
@@ -144,6 +145,7 @@ static void buildStagedReductionStrategyThreadLevel(
           /*reductionVectorSize=*/strategy.getVectorSize(),
           /*mappingAttr=*/strategy.allThreadAttrs[0]);
 
+
   // Staged reduction step 2: multi-warp shuffle reduce.
   // Map the combiner reduction to one thread along y. Mapping this part along
   // y only will trigger the insertion of an `scf.if (threadIdx.x == 0)`
@@ -152,7 +154,7 @@ static void buildStagedReductionStrategyThreadLevel(
   iree_compiler::buildTileFuseDistToForeachThreadWithTileSizes(
       /*b=*/b,
       /*rootH=*/blockCombinerOpH,
-      /*opsToFuse=*/{},
+      /*opsToFuse=*/{gridFillH},
       /*tileSizes=*/getAsOpFoldResult(b.getI64ArrayAttr({1})),
       /*mappingAttr=*/b.getArrayAttr(strategy.allThreadAttrs[1]));
 
@@ -188,8 +190,8 @@ void mlir::iree_compiler::gpu::buildStagedReductionStrategy(
 
   // Step 2. Split the reduction and tile the pieces to ensure vector
   // load/stores and mapping to a single warp with shuffles.
-  // TODO: consider fusing gridFillH.
-  buildStagedReductionStrategyThreadLevel(b, gridReductionH, maybeLeadingHBlock,
+  buildStagedReductionStrategyThreadLevel(b, gridReductionH, gridFillH,
+                                          maybeLeadingHBlock,
                                           maybeTiledTrailingHBlock, strategy);
 
   // Step 3-4. Common trailing steps.
@@ -201,7 +203,9 @@ void mlir::iree_compiler::gpu::buildStagedReductionStrategy(
   assert(strategy.getNumThreadsXInBlock() % kCudaWarpSize == 0 &&
          "strategy requires full warps");
   int64_t numWarpsToUse = strategy.getNumThreadsXInBlock() / kCudaWarpSize;
-  int64_t bitWidth = strategy.captures.reductionOutputElementalTypeBitWidth;
-  numWarpsToUse = adjustNumberOfWarpsForBlockShuffle(numWarpsToUse, bitWidth);
   buildDistributeVectors(b, variantH2, funcH, numWarpsToUse * kCudaWarpSize);
+  
+  // Step 6. Apply clean up of memory operations.
+  funcH = b.create<MatchOp>(variantH2, func::FuncOp::getOperationName());
+  iree_compiler::buildMemoryOptimizations(b, funcH);
 }
