@@ -155,7 +155,7 @@ void mlir::iree_compiler::gpu::buildSmallReductionStrategy(
     const SmallReductionStrategy &strategy) {
   // Step 1. Apply block-level part of the strategy, keeps everything fused.
   auto [maybeLeadingHBlock, gridFillH, gridReductionH,
-        maybeTiledTrailingHBlock] =
+        maybeTiledTrailingHBlock, foreachThread] =
       buildReductionStrategyBlockDistribution(b, variantH, strategy);
 
   // Step 2. Apply thread-level part of the strategy, keeps everything fused.
