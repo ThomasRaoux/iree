@@ -193,7 +193,7 @@ LogicalResult verifyGPUMatmulTensorCorePipeline(
 
   // Verify the first level tile size divides the matmul
   // inputs A [M x K] & B [K x N]
-  if (lhsShape[0] % firstLevelTileSizes[0] != 0 ||
+  /*if (lhsShape[0] % firstLevelTileSizes[0] != 0 ||
       lhsShape[1] % firstLevelTileSizes[2] != 0) {
     return op->emitOpError(
                "lhsShape doesn't factor into first level tile size for ")
@@ -206,7 +206,7 @@ LogicalResult verifyGPUMatmulTensorCorePipeline(
                "rhsShape doesn't factor into first level tile size for ")
            << pipelineName << " [ " << rhsShape[0] << ", " << rhsShape[1]
            << "]";
-  }
+  }*/
 
   // Verify shared memory usage of operands after tiling requires <= 64Kb
   // combined space.

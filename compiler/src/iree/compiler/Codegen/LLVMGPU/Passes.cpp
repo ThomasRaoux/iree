@@ -222,9 +222,13 @@ void addGPUMatmulSimtPassPipeline(OpPassManager &pm) {
 
 void addGPUMatmulTensorCorePassPipeline(OpPassManager &pm,
                                         unsigned pipelineDepth) {
-  tileAndBufferize(pm);
-
+  tileAndDistributeToWorkgroup(pm);
   auto &nestedModulePM = pm.nest<ModuleOp>();
+  nestedModulePM.addNestedPass<func::FuncOp>(
+      createWorkgroupSpecializationPass());
+
+  addBufferizePasses(nestedModulePM);
+
   // Distribute linalg onto warps within the workgroup.
   nestedModulePM.addNestedPass<func::FuncOp>(
       createLLVMGPUTileAndDistribute(/*distributeToWarp=*/true));

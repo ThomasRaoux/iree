@@ -132,7 +132,13 @@ static void populateTilingToWarpPatterns(
       {StringAttr::get(context, getWorkgroupKTiledMarker()),
        StringAttr::get(context, getWorkgroupMemoryMarker())},
       StringAttr::get(context, getVectorizeMarker()));
-  filter.setMatchByDefault();
+  filter
+      .addFilter([](Operation *op) {
+        auto linalgOp = dyn_cast<linalg::LinalgOp>(op);
+        if (!linalgOp || linalgOp.hasDynamicShape()) return failure();
+        return success();
+      })
+      .setMatchByDefault();
   TilingPatterns<linalg::MatmulOp, linalg::FillOp, linalg::BatchMatmulOp,
                  linalg::GenericOp>::insert(patterns, tilingOptions, filter);
 }
@@ -258,7 +264,8 @@ struct LLVMGPUTileAndDistributePass
         return signalPassFailure();
       }
 
-    } else {
+    } 
+    {
       // Apply last level of tiling and distribute to threads.
       RewritePatternSet threadLevelTilingPatterns(context);
       populateTilingToInvocationPatterns(threadLevelTilingPatterns,

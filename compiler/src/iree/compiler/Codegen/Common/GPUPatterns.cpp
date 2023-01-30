@@ -184,6 +184,7 @@ using LinalgPromotionPattern =
 static LogicalResult contractOpFilter(Operation *op) {
   auto linalgOp = dyn_cast<linalg::LinalgOp>(op);
   if (!linalgOp) return failure();
+  if (linalgOp.hasDynamicShape()) return failure();
   // Limit promotion to matmul and batch matmul, there may be generic
   // ops with more batch dimensions we didn't distribute and therefore
   // cannot find a higher bound.

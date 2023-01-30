@@ -103,7 +103,7 @@ static void getTensorCoreConfig(
   if (isFp16) {
     tileSizes.push_back(TileWorkgroupSizePair({{32, 32, 32}, {64, 2, 1}}));
   } else {
-    tileSizes.push_back(TileWorkgroupSizePair({{32, 32, 16}, {64, 2, 1}}));
+    tileSizes.push_back(TileWorkgroupSizePair({{64, 64, 16}, {64, 4, 1}}));
     tileSizes.push_back(TileWorkgroupSizePair({{16, 32, 16}, {64, 1, 1}}));
     tileSizes.push_back(TileWorkgroupSizePair({{32, 16, 16}, {32, 2, 1}}));
     tileSizes.push_back(TileWorkgroupSizePair({{16, 16, 16}, {32, 1, 1}}));
@@ -274,9 +274,7 @@ static LogicalResult setContractConfig(func::FuncOp entryPoint,
       // Pick the best configuration where the original shape is aligned on the
       // tile size.
       for (TileWorkgroupSizePair &config : TCtileSizeConfig) {
-        if (sizeK % config.tileSize[2] == 0 &&
-            sizeN % config.tileSize[1] == 0 &&
-            sizeM % config.tileSize[0] == 0) {
+        if (sizeK % config.tileSize[2] == 0) {
           return setMatmulConfig(
               config.tileSize[0], config.tileSize[1], config.tileSize[2],
               config.workgroupSize,
