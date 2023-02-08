@@ -103,6 +103,7 @@ static void getTensorCoreConfig(
   if (isFp16) {
     tileSizes.push_back(TileWorkgroupSizePair({{32, 32, 32}, {64, 2, 1}}));
   } else {
+    tileSizes.push_back(TileWorkgroupSizePair({{128, 128, 16}, {64, 2, 1}}));
     tileSizes.push_back(TileWorkgroupSizePair({{32, 32, 16}, {64, 2, 1}}));
     tileSizes.push_back(TileWorkgroupSizePair({{16, 32, 16}, {64, 1, 1}}));
     tileSizes.push_back(TileWorkgroupSizePair({{32, 16, 16}, {32, 2, 1}}));
@@ -207,7 +208,7 @@ static LogicalResult setContractConfig(func::FuncOp entryPoint,
 
         SmallVector<unsigned> partitionedLoops =
             cast<PartitionableLoopsInterface>(op.getOperation())
-                .getPartitionableLoops(kNumMaxParallelDims);
+                .getPartitionableLoops(std::nullopt);
         llvm::SmallDenseSet<unsigned, 4> partitionedLoopsSet;
         partitionedLoopsSet.insert(partitionedLoops.begin(),
                                    partitionedLoops.end());

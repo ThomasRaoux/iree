@@ -169,10 +169,13 @@ struct SimplifyTrivialLoops : public OpRewritePattern<scf::ForOp> {
     // TODO: Handle the case where we know that the loop doesn't run more than
     // once but the loop may not run at least once by replace the `loop` with an
     // `if`.
-    if (!(alwaysRunsFirstIteration(op, getMinMax) &&
-          neverRunsSecondIteration(op, getMinMax))) {
+//   if (!(alwaysRunsFirstIteration(op, getMinMax) &&
+//          neverRunsSecondIteration(op, getMinMax))) {
+//      return failure();
+ //   }
+ // Hack, assume distributed loops can be removed.
+    if(op.getLowerBound().getDefiningOp<arith::ConstantOp>())
       return failure();
-    }
 
     // The first iteration is always run and the second iteration is never run
     // so the loop always have 1 iteration. Inline its body and remove the loop.

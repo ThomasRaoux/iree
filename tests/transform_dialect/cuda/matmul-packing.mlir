@@ -16,9 +16,9 @@
 //   iree-opt tests/transform_dialect/cuda/matmul-packing.mlir --iree-transform-dialect-interpreter --transform-dialect-drop-schedule | iree-compile -  --iree-hal-target-backends=cuda
 // ```
 
-!a_tensor_t = tensor<1234x570xf32>
-!b_tensor_t = tensor<570x890xf32>
-!c_tensor_t = tensor<1234x890xf32>
+!a_tensor_t = tensor<3333x1333xf32>
+!b_tensor_t = tensor<1333x2445xf32>
+!c_tensor_t = tensor<3333x2445xf32>
 
 func.func @matmul_nnn(%arg0: !a_tensor_t, %arg1: !b_tensor_t, %arg2: !c_tensor_t) -> !c_tensor_t {
   %0 = linalg.matmul
@@ -48,7 +48,7 @@ transform.sequence failures(propagate) {
       // unless some dimensions are degenerate (i.e. 0 or > problem size).
       //
       //                   mm  nn  kk                           mm nn kk
-      gemm_packed_sizes = [16, 16, 576] gemm_inner_dims_order = [0, 1, 2]
+      gemm_packed_sizes = [128, 128, 1344] gemm_inner_dims_order = [0, 1, 2]
     : (!pdl.operation) -> !transform.op<"linalg.generic">
 
 
