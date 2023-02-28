@@ -66,8 +66,8 @@ static Operation* replaceOpWithPredicatedOp(Operation* op, Value pred,
     // Return/execute the op if it is a side effect free.
     if (mlir::isMemoryEffectFree(op)) return op;
     // Return/execute the op if it is barrier, commit group, or ldmatrix op.
-    if (isa<gpu::BarrierOp, nvgpu::DeviceAsyncCreateGroupOp, nvgpu::LdMatrixOp>(
-            op))
+    if (isa<gpu::BarrierOp, nvgpu::DeviceAsyncCreateGroupOp, nvgpu::LdMatrixOp,
+            nvgpu::DeviceAsyncWaitOp>(op))
       return op;
     // Return/execute the op if it is a shared memory load.
     if (auto loadOp = dyn_cast<vector::LoadOp>(op)) {
@@ -117,6 +117,19 @@ static void addDepOps(llvm::SmallDenseSet<Operation*>& dep, Operation* op,
   }
 }
 
+/// Helper to recursively add operation dependencies within `block` to `dep`
+/// set.
+static void addDepOps(llvm::SmallDenseSet<Operation*>& dep,
+                      llvm::SmallDenseSet<Operation*>& ops, Operation* op,
+                      Block* block) {
+  if (!dep.insert(op).second) return;
+  ops.insert(op);
+  for (Value operand : op->getOperands()) {
+    Operation* defOp = operand.getDefiningOp();
+    if (defOp && defOp->getBlock() == block) addDepOps(dep, ops, defOp, block);
+  }
+}
+
 /// Assign stages to the loop ops. Simple logic by default, put load from global
 /// memory in stage 0 and the rest in stage 1. If store_stage = 0 then put store
 /// to shared memory in stage 0 as well.
@@ -152,8 +165,9 @@ static void setAsyncAnnotations(Operation* op,
   if (auto waitOp = dyn_cast<nvgpu::DeviceAsyncWaitOp>(op)) {
     if (waitOp.getNumGroups()) return;
     int numGroupInFlight = 0;
-    if (part == scf::PipeliningOption::PipelinerPart::Kernel) {
-      numGroupInFlight = depth - 1;
+    if (part == scf::PipeliningOption::PipelinerPart::Kernel ||
+        part == scf::PipeliningOption::PipelinerPart::Prologue) {
+      numGroupInFlight = depth - 2;
     } else {
       // By construction there should be no wait op in the prologue as all the
       // wait should be in the last stage.
@@ -222,6 +236,107 @@ static bool setPipeliningMarkers(scf::ForOp forOp, bool pipelineStoreStage) {
   return copyToWorkgroupMemory;
 }
 
+static bool isMMAOperand(Operation* op, int64_t index) {
+  OpOperand* use = &(*((op->getUses()).begin()));
+  if(auto extract = dyn_cast<vector::ExtractStridedSliceOp>(use->getOwner())) {
+    use = &(*((extract->getUses()).begin()));
+  }
+  if(!isa<nvgpu::MmaSyncOp>(use->getOwner()))
+    return false;
+  return use->getOperandNumber() == index;
+}
+
+
+static bool isAOperand(Operation* op) {
+  return isMMAOperand(op, 0);
+}
+
+static bool isBOperand(Operation* op) {
+  return isMMAOperand(op, 1);
+}
+
+static void getNvidiaTensorCorePipeline(scf::ForOp forOp,
+                              std::vector<std::pair<Operation*, unsigned>>& ops,
+                              unsigned depth) {
+  bool loopCanBePipelined = false;
+  static constexpr int64_t prefetchSize = 4;
+  SmallVector<Operation*> stage0;
+  SmallVector<Operation*> stagePrefetch;
+  SmallVector<Operation*> stageLast;
+  int64_t sizeReadA = 0;
+  int64_t sizeReadB = 0;
+  for (Operation& op : forOp.getBody()->getOperations()) {
+    // Pipeline the most inner for op that should be a flat region.
+    if (op.getNumRegions() > 0) {
+      loopCanBePipelined = false;
+      break;
+    }
+    if (isa<gpu::BarrierOp, nvgpu::DeviceAsyncWaitOp>(op)) {
+      stagePrefetch.push_back(&op);
+    }
+    if (isa<nvgpu::MmaSyncOp>(op)) {
+      stageLast.push_back(&op);
+    }
+    if (isa<nvgpu::DeviceAsyncCopyOp, nvgpu::DeviceAsyncCreateGroupOp>(op)) {
+      stage0.push_back(&op);
+    }
+    if (isa<nvgpu::LdMatrixOp>(op)) {
+      // Prefecth some of the ldmatrix.
+      if (isAOperand(&op)) {
+        sizeReadA++;
+        if (sizeReadA <= prefetchSize) {
+          stagePrefetch.push_back(&op);
+          continue;
+        }
+      }
+      if (isBOperand(&op)) {
+        sizeReadB++;
+        if (sizeReadB <= prefetchSize) {
+          stagePrefetch.push_back(&op);
+          continue;
+        }
+      }
+      // If not prefected go in the last stage.
+      stageLast.push_back(&op);
+    }
+  }
+
+  // Return an empty schedule if the loop is not a candidate to be pipelined.
+  if(loopCanBePipelined || stage0.empty())
+    return;
+
+
+ // Track dependencies of stage 0 ops.
+  llvm::SmallDenseSet<Operation*> deps;
+  llvm::SmallDenseSet<Operation*> stage0Deps;
+  llvm::SmallDenseSet<Operation*> stageNMinusOneDeps;
+  llvm::SmallDenseSet<Operation*> stageNDeps;
+  for (Operation* op : stage0) {
+    addDepOps(deps, stage0Deps, op, forOp.getBody());
+  }
+
+  for (Operation* op : stagePrefetch) {
+    addDepOps(deps, stageNMinusOneDeps, op, forOp.getBody());
+  }
+
+  for (Operation* op : stageLast) {
+    addDepOps(deps, stageNDeps, op, forOp.getBody());
+  }
+  // Schedule Last stage followed by stage 0 follwed by prefetch.
+  for (Operation& op : forOp.getBody()->getOperations()) {
+    if(stageNDeps.count(&op))
+      ops.push_back(std::make_pair(&op, depth-1));
+  }
+  for (Operation& op : forOp.getBody()->getOperations()) {
+    if(stage0Deps.count(&op))
+      ops.push_back(std::make_pair(&op, 0));
+  }
+  for (Operation& op : forOp.getBody()->getOperations()) {
+    if(stageNMinusOneDeps.count(&op))
+      ops.push_back(std::make_pair(&op, depth - 2));
+  }  
+}
+
 /// Apply pipeline rewrite pattern assuming the operations were already
 /// annotated with stage information.
 // TODO: move away from using attribute annotations.
@@ -233,7 +348,9 @@ static FailureOr<scf::ForOp> applyPipelining(scf::ForOp forOp, int64_t depth,
   auto getSchedule = [maxDepth](
                          scf::ForOp forOp,
                          std::vector<std::pair<Operation*, unsigned>>& ops) {
-    return getPipelineStages(forOp, ops, maxDepth);
+    
+    return getNvidiaTensorCorePipeline(forOp, ops, maxDepth);
+    //return getPipelineStages(forOp, ops, maxDepth);
   };
   auto setAnnotation = [maxDepth, pipelineStoreStage](
                            Operation* op,
@@ -273,10 +390,13 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
     // Mark the loop with shared memory copy for pipelining.
     funcOp.walk([&forOps](scf::ForOp forOp) { forOps.push_back(forOp); });
     for (scf::ForOp forOp : forOps) {
-      if (setPipeliningMarkers(forOp, pipelineStoreStage)) {
-        (void)applyPipelining(forOp, depth, epiloguePeeling,
+
+      (void)applyPipelining(forOp, depth, epiloguePeeling,
                               pipelineStoreStage);
-      }
+      //if (setPipeliningMarkers(forOp, pipelineStoreStage)) {
+      //  (void)applyPipelining(forOp, depth, epiloguePeeling,
+      //                        pipelineStoreStage);
+     // }
     }
     // Remove extra barriers from the prologue assuming appropriate
     // multi-buffering.
