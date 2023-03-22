@@ -50,6 +50,7 @@ CU_PFN_DECL(cuMemHostGetDevicePointer, CUdeviceptr*, void*, unsigned int)
 CU_PFN_DECL(cuModuleGetFunction, CUfunction*, CUmodule, const char*)
 CU_PFN_DECL(cuModuleLoadDataEx, CUmodule*, const void*, unsigned int,
             CUjit_option*, void**)
+CU_PFN_DECL(cuModuleLoadData, CUmodule*, const void*)            
 CU_PFN_DECL(cuModuleUnload, CUmodule)
 CU_PFN_DECL(cuStreamCreate, CUstream*, unsigned int)
 CU_PFN_DECL(cuStreamDestroy, CUstream)

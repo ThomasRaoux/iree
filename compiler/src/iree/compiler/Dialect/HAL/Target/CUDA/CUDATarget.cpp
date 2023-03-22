@@ -37,6 +37,15 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/NVVM/NVVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Support/FileUtilities.h"
+#include "llvm/Support/raw_ostream.h"
+
+#include "llvm/Support/SourceMgr.h"
+#include <fstream>
 
 static llvm::cl::opt<bool> dumpPtx(
     "iree-hal-cuda-dump-ptx", llvm::cl::init(false),
@@ -380,11 +389,42 @@ class CUDATargetBackend final : public TargetBackend {
                      variantOp.getName(), ".ptx", ptxImage);
     }
 
+    // compile ptx with ptxas
+    llvm::SmallString<64> fsrc;
+    llvm::SmallString<64> flog;
+    llvm::sys::fs::createTemporaryFile("compile-ptx-src", "", fsrc);
+    llvm::sys::fs::createTemporaryFile("compile-ptx-log", "", flog);
+    std::string fbin = std::string(fsrc) + ".o";
+    llvm::FileRemover logRemover(flog);
+    llvm::FileRemover binRemover(fbin);
+    const char *_fsrc = fsrc.c_str();
+    const char *_flog = flog.c_str();
+    const char *_fbin = fbin.c_str();
+    std::ofstream ofs(_fsrc);
+    ofs << ptxImage << std::endl;
+    ofs.close();
+    int err;
+
+    std::string cmd = "ptxas -v --gpu-name=sm_80 " + std::string(_fsrc) + " -o " + std::string(_fsrc) +
+                ".o 2> " + _flog;
+
+    err = system(cmd.c_str());
+    std::string content;
+    if (err != 0) {
+      printf("error\n");
+      return success();
+    } else {
+      llvm::FileRemover srcRemover(fsrc);
+      std::ifstream _cubin(_fbin, std::ios::binary);
+      content = std::string(std::istreambuf_iterator<char>(_cubin), {});
+      _cubin.close();
+    }
+
     FlatbufferBuilder builder;
     iree_CUDAExecutableDef_start_as_root(builder);
 
     auto ptxImageRef = flatbuffers_uint8_vec_create(
-        builder, reinterpret_cast<const uint8_t *>(ptxImage.c_str()),
+        builder, reinterpret_cast<const uint8_t *>(content.c_str()),
         ptxImage.size());
     iree_CUDABlockSizeDef_vec_start(builder);
     for (const auto &workgroupSize : workgroupSizes) {

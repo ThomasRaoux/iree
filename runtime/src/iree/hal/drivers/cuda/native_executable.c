@@ -97,8 +97,8 @@ iree_status_t iree_hal_cuda_native_executable_create(
     // contents. We could check this prior to creating
     status = CU_RESULT_TO_STATUS(
         context->syms,
-        cuModuleLoadDataEx(&executable->module, ptx_image, 0, NULL, NULL),
-        "cuModuleLoadDataEx");
+        cuModuleLoadData(&executable->module, ptx_image),
+        "cuModuleLoadData");
   }
 
   if (iree_status_is_ok(status)) {
