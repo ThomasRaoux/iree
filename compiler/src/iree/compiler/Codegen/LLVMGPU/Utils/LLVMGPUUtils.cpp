@@ -9,6 +9,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Visitors.h"
@@ -85,6 +86,28 @@ static Operation::operand_range getIndices(Operation* op) {
   if (auto transferWriteOp = dyn_cast<vector::TransferWriteOp>(op))
     return transferWriteOp.getIndices();
   llvm_unreachable("unsupported op type");
+}
+
+/// Hack masking, prevents out of bound access.
+static Value getReadMask(RewriterBase& rewriter, Operation* read) {
+  auto transferRead = dyn_cast<vector::TransferReadOp>(read);
+  if(!transferRead)
+    return Value();
+  Value mask = transferRead.getMask();
+  if(!mask)
+    return Value();
+  Location loc = transferRead.getLoc();
+  rewriter.setInsertionPoint(read);
+  int64_t numEl = transferRead.getVectorType().getNumElements();
+  Value numElValue =
+      rewriter.create<arith::ConstantIndexOp>(loc, numEl);
+  for (unsigned int i = 0; i < numEl; i++) {
+    Value cnd = rewriter.create<vector::ExtractOp>(loc, mask, numEl - i - 1);
+    Value el =
+      rewriter.create<arith::ConstantIndexOp>(loc, numEl - i - 1);
+    numElValue = rewriter.create<arith::SelectOp>(loc, cnd, numElValue, el);
+  }
+  return numElValue;
 }
 
 void createAsyncGroups(RewriterBase& rewriter, func::FuncOp funcOp,
@@ -177,6 +200,7 @@ void createAsyncGroups(RewriterBase& rewriter, func::FuncOp funcOp,
       rewriter.setInsertionPoint(writeOp);
       Value vectorVal = getValueStored(writeOp);
       Operation* readOp = vectorVal.getDefiningOp();
+      Value mask = getReadMask(rewriter, readOp);
       Value storeBase = getMemrefOperand(writeOp);
       Value loadBase = getMemrefOperand(readOp);
       Value token = rewriter.create<nvgpu::DeviceAsyncCopyOp>(
@@ -185,7 +209,7 @@ void createAsyncGroups(RewriterBase& rewriter, func::FuncOp funcOp,
           getIndices(writeOp), loadBase, getIndices(readOp),
           rewriter.getIndexAttr(
               vectorVal.getType().cast<VectorType>().getNumElements()),
-          Value(),
+          mask,
           /*bypassL1=*/useMMASync ? rewriter.getUnitAttr() : UnitAttr());
       tokens.push_back(token);
     }
