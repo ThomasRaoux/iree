@@ -534,45 +534,51 @@ static void distributeTransferReads(vector::TransferReadOp readOp,
       elementType);
   Value vector = rewriter.create<arith::ConstantOp>(
       loc, vecType, rewriter.getZeroAttr(vecType));
-  std::array<int, DimType::NumDims> state;
   bool useLdMatrix = isLdMatrixCompatible(readOp, layout);
-  for (int b0 = 0; b0 < layout.shape[DimType::Batch0]; b0++) {
-    state[DimType::Batch0] = b0;
-    for (int b1 = 0; b1 < layout.shape[DimType::Batch1]; b1++) {
-      state[DimType::Batch1] = b1;
-      for (int i = 0; i < layout.shape[DimType::VecIdZ]; i++) {
-        state[DimType::VecIdZ] = i;
-        for (int j = 0; j < layout.shape[DimType::VecIdY]; j++) {
-          state[DimType::VecIdY] = j;
-          if (useLdMatrix) {
-            state[DimType::VecIdX] = 0;
-            Value ld =
-                emitLdMatrix(rewriter, loc, layout, state, indices,
-                             readOp.getPermutationMap(), threadIds, source);
-            SmallVector<int64_t> offsets{
-                b0, b1, j * layout.shape[DimType::VecIdZ] + i, 0};
-            SmallVector<int64_t> strides{1, 1};
-            vector = rewriter.create<vector::InsertStridedSliceOp>(
-                loc, ld, vector, offsets, strides);
-            continue;
-          }
-          for (int k = 0; k < layout.shape[DimType::VecIdX]; k++) {
-            state[DimType::VecIdX] = k;
-            SmallVector<Value> newIndices =
-                getDistributedIndices(rewriter, loc, layout, state, indices,
-                                      readOp.getPermutationMap(), threadIds);
-            Value el = rewriter.create<memref::LoadOp>(loc, source, newIndices);
-            auto vectorType = VectorType::get({1}, elementType);
-            Value v = rewriter.create<vector::BroadcastOp>(loc, vectorType, el);
-            SmallVector<int64_t> offsets{
-                b0, b1, j * layout.shape[DimType::VecIdZ] + i, k};
-            SmallVector<int64_t> strides{1};
-            vector = rewriter.create<vector::InsertStridedSliceOp>(
-                loc, v, vector, offsets, strides);
-          }
-        }
+  std::array<int, DimType::NumDims> state = {0};
+  while (1) {
+    if (useLdMatrix) {
+      Value ld = emitLdMatrix(rewriter, loc, layout, state, indices,
+                              readOp.getPermutationMap(), threadIds, source);
+      SmallVector<int64_t> offsets{
+          state[DimType::Batch0], state[DimType::Batch1],
+          state[DimType::VecIdY] * layout.shape[DimType::VecIdZ] +
+              state[DimType::VecIdZ],
+          state[DimType::VecIdX]};
+      SmallVector<int64_t> strides{1, 1};
+      vector = rewriter.create<vector::InsertStridedSliceOp>(loc, ld, vector,
+                                                             offsets, strides);                                                            
+      // this loads 2 elements.
+      state[DimType::VecIdX]++;
+    } else {
+      SmallVector<Value> newIndices =
+          getDistributedIndices(rewriter, loc, layout, state, indices,
+                                readOp.getPermutationMap(), threadIds);
+      Value el = rewriter.create<memref::LoadOp>(loc, source, newIndices);
+      auto vectorType = VectorType::get({1}, elementType);
+      Value v = rewriter.create<vector::BroadcastOp>(loc, vectorType, el);
+      SmallVector<int64_t> offsets{
+          state[DimType::Batch0], state[DimType::Batch1],
+          state[DimType::VecIdY] * layout.shape[DimType::VecIdZ] +
+              state[DimType::VecIdZ],
+          state[DimType::VecIdX]};
+      SmallVector<int64_t> strides{1};
+      vector = rewriter.create<vector::InsertStridedSliceOp>(loc, v, vector,
+                                                             offsets, strides);
+    }
+    // Go to the next offset.
+    int carry = 1;
+    for (int dim : {DimType::VecIdX, DimType::VecIdY, DimType::VecIdZ,
+                    DimType::Batch1, DimType::Batch0}) {
+      state[dim] += carry;
+      carry = 0;
+      if (state[dim] == layout.shape[dim]) {
+        state[dim] = 0;
+        carry = 1;
       }
     }
+    if(carry == 1)
+      break;
   }
   simdToSimtMap.try_emplace(result, vector);
   ops.insert(readOp);
