@@ -435,6 +435,26 @@ static bool isLdMatrixCompatible(vector::TransferReadOp readOp,
   return compatibleLayout;
 }
 
+static bool isLdMatrix4Compatible(vector::TransferReadOp readOp,
+                                  const Layout &layout, int &dimX, int &dimY) {
+  if (!isLdMatrixCompatible(readOp, layout)) return false;
+  SmallVector<int> evenDims;
+  // Look for 2x2 dimensions to emit a ldmatrix4.
+  // This is a hack this should be much more generic.
+  for (int i :
+       {DimType::VecIdY, DimType::VecIdZ, DimType::Batch1, DimType::Batch0}) {
+    if (layout.shape[i] == 1) continue;
+    if (layout.shape[i] % 2 == 0) evenDims.push_back(i);
+    if (evenDims.size() == 2) break;
+  }
+  if (evenDims.size() == 2) {
+    dimX = evenDims[0];
+    dimY = evenDims[1];
+    return true;
+  }
+  return false;
+}
+
 /// Return true if the permutation map requires using a transposed ldmatrix op.
 static bool isTransposedLdMatrix(AffineMap map) {
   if (map.getNumResults() != 2) {
@@ -509,6 +529,116 @@ static Value emitLdMatrix(OpBuilder &rewriter, Location loc, Layout &layout,
   return el;
 }
 
+/// Emit nvgpu.ldmatrix code sequence at the given offset.
+/// ldmatrix loads 8 blocks of 8 contiguous 16bits elements. The start address
+/// of each blocks are packed in 8 lanes. Therefore we first calculate the
+/// common base offset for all the lanes and we add the block offsets using
+/// `blockid = flatid %8`
+static Value emitLdMatrix4(OpBuilder &rewriter, Location loc, Layout &layout,
+                           std::array<int, DimType::NumDims> &state,
+                           ArrayRef<Value> indices, AffineMap permutationMap,
+                           const std::array<Value, 3> &threadIds,
+                           Value memrefValue, int dimX, int dimY) {
+  bool transpose = isTransposedLdMatrix(permutationMap);
+  // First compute the vector part of the offset.
+  Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+  std::array<Value, 3> threadIdsLdMatrix = {zero, zero, zero};
+  AffineExpr row = layout.computeDim(0, state, rewriter);
+  AffineMap rowMap = AffineMap::get(3, 0, row, rewriter.getContext());
+  std::array<Value, 2> vectorOffsets;
+  vectorOffsets[0] =
+      rewriter.create<AffineApplyOp>(loc, rowMap, threadIdsLdMatrix);
+  AffineExpr col = layout.computeDim(1, state, rewriter);
+  AffineMap colMap = AffineMap::get(3, 0, col, rewriter.getContext());
+  vectorOffsets[1] =
+      rewriter.create<AffineApplyOp>(loc, colMap, threadIdsLdMatrix);
+
+  AffineExpr d0, d1, d2, d3;
+  bindDims(rewriter.getContext(), d0, d1, d2, d3);
+  std::array<Value, 2> blockOffsetsX;
+  std::array<Value, 2> blockOffsetsY;
+  {
+    AffineExpr laneIdModuloX = (d0 + d1 * 4).floorDiv(8) % 2;
+    Value BlockIdX = rewriter.create<AffineApplyOp>(
+        loc, laneIdModuloX, ArrayRef<Value>({threadIds[0], threadIds[1]}));
+    std::array<int, DimType::NumDims> blockState = {0};
+    blockState[dimX] = 1;
+    AffineExpr row2 = layout.computeDim(0, blockState, rewriter);
+    AffineMap rowMap2 = AffineMap::get(3, 0, row2, rewriter.getContext());
+    std::array<Value, 3> threads = {zero, zero, zero};
+    blockOffsetsX[0] = rewriter.create<AffineApplyOp>(loc, rowMap2, threads);
+    AffineExpr col2 = layout.computeDim(1, blockState, rewriter);
+    AffineMap colMap2 = AffineMap::get(3, 0, col2, rewriter.getContext());
+    blockOffsetsX[1] = rewriter.create<AffineApplyOp>(loc, colMap2, threads);
+    blockOffsetsX[0] =
+        rewriter.create<arith::MulIOp>(loc, blockOffsetsX[0], BlockIdX);
+    blockOffsetsX[1] =
+        rewriter.create<arith::MulIOp>(loc, blockOffsetsX[1], BlockIdX);
+  }
+
+  {
+    AffineExpr laneIdModuloY = (d0 + d1 * 4).floorDiv(16);
+    Value BlockIdY = rewriter.create<AffineApplyOp>(
+        loc, laneIdModuloY, ArrayRef<Value>({threadIds[0], threadIds[1]}));
+    std::array<int, DimType::NumDims> blockState = {0};
+    blockState[dimY] = 1;
+    AffineExpr row2 = layout.computeDim(0, blockState, rewriter);
+    AffineMap rowMap2 = AffineMap::get(3, 0, row2, rewriter.getContext());
+    std::array<Value, 3> threads = {zero, zero, zero};
+    blockOffsetsY[0] = rewriter.create<AffineApplyOp>(loc, rowMap2, threads);
+    AffineExpr col2 = layout.computeDim(1, blockState, rewriter);
+    AffineMap colMap2 = AffineMap::get(3, 0, col2, rewriter.getContext());
+    blockOffsetsY[1] = rewriter.create<AffineApplyOp>(loc, colMap2, threads);
+
+    blockOffsetsY[0] =
+        rewriter.create<arith::MulIOp>(loc, blockOffsetsY[0], BlockIdY);
+    blockOffsetsY[1] =
+        rewriter.create<arith::MulIOp>(loc, blockOffsetsY[1], BlockIdY);
+  }
+
+  // Then compute the offset for each lane.
+
+  AffineExpr laneIdModuloEight = (d0 + d1 * 4) % 8;
+  Value laneId = rewriter.create<AffineApplyOp>(
+      loc, laneIdModuloEight, ArrayRef<Value>({threadIds[0], threadIds[1]}));
+
+  std::array<int, DimType::NumDims> emptyState = {0};
+  threadIdsLdMatrix = {zero, laneId, zero};
+  AffineExpr row2 = layout.computeDim(0, emptyState, rewriter);
+  AffineMap rowMap2 = AffineMap::get(3, 0, row2, rewriter.getContext());
+  std::array<Value, 2> laneOffsets;
+  laneOffsets[0] =
+      rewriter.create<AffineApplyOp>(loc, rowMap2, threadIdsLdMatrix);
+  AffineExpr col2 = layout.computeDim(1, emptyState, rewriter);
+  AffineMap colMap2 = AffineMap::get(3, 0, col2, rewriter.getContext());
+  laneOffsets[1] =
+      rewriter.create<AffineApplyOp>(loc, colMap2, threadIdsLdMatrix);
+  SmallVector<Value> newIndices{indices.begin(), indices.end()};
+  int64_t laneDim = 0;
+  // When transposing we need to swap the lane offsets.
+  if (transpose) {
+    std::swap(laneOffsets[0], laneOffsets[1]);
+  }
+  for (AffineExpr expr : permutationMap.getResults()) {
+    auto dimExpr = expr.dyn_cast<AffineDimExpr>();
+    if (!dimExpr) continue;
+    unsigned pos = dimExpr.getPosition();
+    newIndices[pos] = rewriter.create<arith::AddIOp>(
+        loc, vectorOffsets[laneDim], newIndices[pos]);
+    newIndices[pos] = rewriter.create<arith::AddIOp>(
+        loc, blockOffsetsX[laneDim], newIndices[pos]);
+    newIndices[pos] = rewriter.create<arith::AddIOp>(
+        loc, blockOffsetsY[laneDim], newIndices[pos]);
+    newIndices[pos] = rewriter.create<arith::AddIOp>(
+        loc, laneOffsets[laneDim++], newIndices[pos]);
+  }
+  Type vecType = VectorType::get(
+      {4, 2}, memrefValue.getType().cast<MemRefType>().getElementType());
+  Value el = rewriter.create<nvgpu::LdMatrixOp>(loc, vecType, memrefValue,
+                                                newIndices, transpose, 4);
+  return el;
+}
+
 static void distributeTransferReads(vector::TransferReadOp readOp,
                                     DenseMap<Value, Layout> &layoutMap,
                                     DenseMap<Value, Value> &simdToSimtMap,
@@ -535,21 +665,51 @@ static void distributeTransferReads(vector::TransferReadOp readOp,
   Value vector = rewriter.create<arith::ConstantOp>(
       loc, vecType, rewriter.getZeroAttr(vecType));
   bool useLdMatrix = isLdMatrixCompatible(readOp, layout);
+  int dimX = -1;
+  int dimY = -1;
+  bool useLdMatrix4 = isLdMatrix4Compatible(readOp, layout, dimX, dimY);
   std::array<int, DimType::NumDims> state = {0};
   while (1) {
     if (useLdMatrix) {
-      Value ld = emitLdMatrix(rewriter, loc, layout, state, indices,
-                              readOp.getPermutationMap(), threadIds, source);
-      SmallVector<int64_t> offsets{
-          state[DimType::Batch0], state[DimType::Batch1],
-          state[DimType::VecIdY] * layout.shape[DimType::VecIdZ] +
-              state[DimType::VecIdZ],
-          state[DimType::VecIdX]};
-      SmallVector<int64_t> strides{1, 1};
-      vector = rewriter.create<vector::InsertStridedSliceOp>(loc, ld, vector,
-                                                             offsets, strides);                                                            
-      // this loads 2 elements.
-      state[DimType::VecIdX]++;
+      if (useLdMatrix4) {
+        Value ld = emitLdMatrix4(rewriter, loc, layout, state, indices,
+                                 readOp.getPermutationMap(), threadIds, source,
+                                 dimX, dimY);
+        std::array<int64_t, 2> strides = {1, 1};
+        std::array<int64_t, 2> shape = {1, 2};
+        for (int i = 0; i < 4; i++) {
+          std::array<int, DimType::NumDims> tempState = state;
+          tempState[dimX] += i % 2;
+          tempState[dimY] += i / 2;
+          std::array<int64_t, 2> offset = {i, 0};
+          Value chunk = rewriter.create<vector::ExtractStridedSliceOp>(
+              loc, ld, offset, shape, strides);
+          SmallVector<int64_t> offsets{
+              tempState[DimType::Batch0], tempState[DimType::Batch1],
+              tempState[DimType::VecIdY] * layout.shape[DimType::VecIdZ] +
+                  tempState[DimType::VecIdZ],
+              tempState[DimType::VecIdX]};
+          vector = rewriter.create<vector::InsertStridedSliceOp>(
+              loc, chunk, vector, offsets, strides);
+        }
+        // skip the elements already loaded.
+        state[DimType::VecIdX]++;
+        state[dimX]++;
+        state[dimY]++;
+      } else {
+        Value ld = emitLdMatrix(rewriter, loc, layout, state, indices,
+                                readOp.getPermutationMap(), threadIds, source);
+        SmallVector<int64_t> offsets{
+            state[DimType::Batch0], state[DimType::Batch1],
+            state[DimType::VecIdY] * layout.shape[DimType::VecIdZ] +
+                state[DimType::VecIdZ],
+            state[DimType::VecIdX]};
+        SmallVector<int64_t> strides{1, 1};
+        vector = rewriter.create<vector::InsertStridedSliceOp>(
+            loc, ld, vector, offsets, strides);
+        // this loads 2 elements.
+        state[DimType::VecIdX]++;
+      }
     } else {
       SmallVector<Value> newIndices =
           getDistributedIndices(rewriter, loc, layout, state, indices,
